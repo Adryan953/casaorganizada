@@ -59,7 +59,7 @@ export function LoginScreen({ onLoginSuccess }) {
         {/* Logo */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
           <img
-            src="/logo.png"
+            src="./logo.png"
             alt="Casa em Paz"
             style={{
               width: '100px',

@@ -26,13 +26,22 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      // Registro do Service Worker
+      // Desativa e limpa Service Worker no aplicativo móvel para evitar cache preso e tela branca
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((reg) => console.log('PWA Service Worker ativo!', reg.scope))
-            .catch((err) => console.log('Falha no Service Worker:', err));
-        });
+        const isApp = window.location.protocol === 'capacitor:' || 
+                      window.location.hostname === 'localhost' || 
+                      window.Capacitor;
+        if (isApp) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (let reg of registrations) {
+              reg.unregister();
+            }
+          }).catch(() => {});
+        } else {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').catch(() => {});
+          });
+        }
       }
     </script>
   </body>

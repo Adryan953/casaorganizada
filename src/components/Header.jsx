@@ -20,7 +20,7 @@ export function Header({
         {/* Marca do App */}
         <div className="brand-wrapper">
           <img
-            src="/logo.png"
+            src="./logo.png"
             alt="Casa em Paz"
             style={{
               width: '38px',

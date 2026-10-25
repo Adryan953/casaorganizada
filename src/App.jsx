@@ -38,42 +38,50 @@ export default function App() {
   });
   const [syncStatus, setSyncStatus] = useState({ online: true, reason: 'connecting', mode: 'realtime' });
 
-  // Inicializa Supabase e sincroniza feedbacks do banco
+  // Inicializa Supabase e sincroniza feedbacks do banco de forma segura
   useEffect(() => {
-    initSupabase();
+    try {
+      initSupabase();
 
-    // Carrega feedbacks salvos na nuvem
-    fetchFeedbacksSupabase(appData.coupleCode).then((cloudFeedbacks) => {
-      if (cloudFeedbacks && cloudFeedbacks.length > 0) {
-        setAppData((prev) => {
-          const existingIds = new Set((prev.feedbacks || []).map((f) => f.id));
-          const toAdd = cloudFeedbacks.filter((cf) => !existingIds.has(cf.id));
-          if (toAdd.length === 0) return prev;
-          return { ...prev, feedbacks: [...toAdd, ...(prev.feedbacks || [])] };
-        });
-      }
-    });
-
-    // Escuta novos feedbacks em tempo real via Supabase Realtime
-    const unsubFeedbacks = subscribeToSupabaseFeedbacks(appData.coupleCode, ({ eventType, feedback }) => {
-      if (!feedback) return;
-      setAppData((prev) => {
-        let updatedList = [...(prev.feedbacks || [])];
-        if (eventType === 'INSERT') {
-          if (!updatedList.some((f) => f.id === feedback.id)) {
-            updatedList = [feedback, ...updatedList];
-            try { playChimeSound(); } catch (e) {}
+      // Carrega feedbacks salvos na nuvem
+      fetchFeedbacksSupabase(appData.coupleCode)
+        .then((cloudFeedbacks) => {
+          if (cloudFeedbacks && cloudFeedbacks.length > 0) {
+            setAppData((prev) => {
+              const existingIds = new Set((prev.feedbacks || []).map((f) => f.id));
+              const toAdd = cloudFeedbacks.filter((cf) => !existingIds.has(cf.id));
+              if (toAdd.length === 0) return prev;
+              return { ...prev, feedbacks: [...toAdd, ...(prev.feedbacks || [])] };
+            });
           }
-        } else if (eventType === 'UPDATE') {
-          updatedList = updatedList.map((f) => (f.id === feedback.id ? { ...f, ...feedback } : f));
-        }
-        return { ...prev, feedbacks: updatedList };
-      });
-    });
+        })
+        .catch((err) => {
+          console.warn('Busca de feedbacks do Supabase avisou (offline/conexao):', err);
+        });
 
-    return () => {
-      if (unsubFeedbacks) unsubFeedbacks();
-    };
+      // Escuta novos feedbacks em tempo real via Supabase Realtime
+      const unsubFeedbacks = subscribeToSupabaseFeedbacks(appData.coupleCode, ({ eventType, feedback }) => {
+        if (!feedback) return;
+        setAppData((prev) => {
+          let updatedList = [...(prev.feedbacks || [])];
+          if (eventType === 'INSERT') {
+            if (!updatedList.some((f) => f.id === feedback.id)) {
+              updatedList = [feedback, ...updatedList];
+              try { playChimeSound(); } catch (e) {}
+            }
+          } else if (eventType === 'UPDATE') {
+            updatedList = updatedList.map((f) => (f.id === feedback.id ? { ...f, ...feedback } : f));
+          }
+          return { ...prev, feedbacks: updatedList };
+        });
+      });
+
+      return () => {
+        if (unsubFeedbacks) unsubFeedbacks();
+      };
+    } catch (err) {
+      console.warn('Erro ao inicializar servicos de nuvem:', err);
+    }
   }, [appData.coupleCode]);
 
   // Aplica o tema visual no elemento HTML

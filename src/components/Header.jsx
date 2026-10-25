@@ -12,61 +12,63 @@ export function Header({
   onOpenSettings,
   onLogout
 }) {
-  const otherUser = users.find((u) => u.id !== activeUser.id) || users[1];
+  const otherUser = users.find((u) => u.id !== activeUser?.id) || users[1];
 
   return (
     <header className="app-header">
       <div className="header-top-row">
         {/* Marca do App */}
-        <div className="brand-wrapper">
+        <div className="brand-wrapper" style={{ minWidth: 0, flexShrink: 1 }}>
           <img
             src="./logo.png"
             alt="Casa em Paz"
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
               objectFit: 'cover',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+              boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
+              flexShrink: 0
             }}
           />
-          <div>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
             <h1 className="brand-title">Casa em Paz</h1>
             <p className="brand-subtitle">
-              Casal: <strong style={{ color: 'var(--accent-primary)', letterSpacing: '0.04em' }}>{coupleCode}</strong>
+              Casal: <strong style={{ color: 'var(--accent-primary)', letterSpacing: '0.03em' }}>{coupleCode}</strong>
             </p>
           </div>
         </div>
 
         {/* Controles do Topo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
           {/* Status de Sincronização em Tempo Real */}
           <div
             title={syncStatus.online ? 'Sincronizado ao vivo entre os celulares' : 'Conectando à nuvem...'}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '5px',
-              fontSize: '0.74rem',
+              gap: '4px',
+              fontSize: '0.72rem',
               fontWeight: '700',
-              padding: '4px 8px',
+              padding: '3px 7px',
               borderRadius: 'var(--radius-full)',
-              backgroundColor: syncStatus.online ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              backgroundColor: syncStatus.online ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.15)',
               color: syncStatus.online ? 'var(--accent-primary)' : 'var(--accent-warm)',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
             }}
             onClick={onOpenSettings}
           >
             <span
               style={{
-                width: '7px',
-                height: '7px',
+                width: '6px',
+                height: '6px',
                 borderRadius: '50%',
                 backgroundColor: syncStatus.online ? '#10b981' : '#f59e0b',
                 display: 'inline-block'
               }}
             />
-            <span>{syncStatus.online ? 'Ao Vivo' : 'Reconectando'}</span>
+            <span>{syncStatus.online ? 'Ao Vivo' : 'Conectando'}</span>
           </div>
 
           {/* Alternar Tema */}
@@ -75,8 +77,9 @@ export function Header({
             onClick={onToggleTheme}
             aria-label="Alternar modo claro e escuro"
             title="Alternar tema"
+            style={{ padding: '5px' }}
           >
-            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
 
           {/* Botão Sair */}
@@ -86,6 +89,7 @@ export function Header({
               onClick={onLogout}
               aria-label="Sair da conta"
               title="Trocar de conta / Sair"
+              style={{ padding: '5px' }}
             >
               <LogOut size={16} />
             </button>
@@ -93,30 +97,32 @@ export function Header({
         </div>
       </div>
 
-      {/* Barra de Perfil Ativo com Alternância Rápida de Aparelho */}
+      {/* Barra de Perfil Ativo Fina e Discreta */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '6px 10px',
+          padding: '4px 8px',
           backgroundColor: 'var(--bg-app)',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border-subtle)'
+          borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--border-subtle)',
+          fontSize: '0.75rem',
+          lineHeight: 1.2
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
           <span style={{ color: 'var(--text-muted)' }}>Você:</span>
-          <span style={{ fontWeight: '700', color: activeUser.color, display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span>{activeUser.avatar}</span>
-            <span>{activeUser.name}</span>
+          <span style={{ fontWeight: '700', color: activeUser?.color, display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span>{activeUser?.avatar}</span>
+            <span>{activeUser?.name}</span>
           </span>
         </div>
 
         {otherUser && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-secondary)', overflow: 'hidden', whiteSpace: 'nowrap' }}>
             <span style={{ color: 'var(--text-muted)' }}>Com:</span>
-            <span style={{ fontWeight: '600' }}>{otherUser.avatar} {otherUser.name}</span>
+            <span style={{ fontWeight: '600' }}>{otherUser?.avatar} {otherUser?.name}</span>
           </div>
         )}
       </div>

@@ -12,7 +12,8 @@ import {
 import {
   DEFAULT_USERS,
   INITIAL_TASKS,
-  INITIAL_AVAILABILITY
+  INITIAL_AVAILABILITY,
+  normalizeUserId
 } from '../constants/initialData';
 import { generateWeeklySchedule } from './schedulerService';
 
@@ -101,6 +102,33 @@ export function loadLocalData() {
         if (!parsed.coupleCode) {
           parsed.coupleCode = DEFAULT_COUPLE_CODE;
         }
+
+        // Garante que a lista de usuários contenha os dois perfis oficiais com IDs limpos
+        parsed.users = DEFAULT_USERS.map((def) => {
+          const existing = (parsed.users || []).find((u) => normalizeUserId(u.id || u.username) === def.id);
+          return existing ? { ...def, name: existing.name || def.name } : def;
+        });
+
+        // Migra tarefas com IDs legados ('user1' -> 'adryan', 'user2' -> 'kah')
+        if (Array.isArray(parsed.weeklySchedule)) {
+          parsed.weeklySchedule = parsed.weeklySchedule.map((t) => ({
+            ...t,
+            assignedTo: normalizeUserId(t.assignedTo)
+          }));
+        }
+
+        // Migra disponibilidade se estiver usando chaves antigas
+        if (parsed.availability) {
+          const avail = {};
+          if (parsed.availability.adryan || parsed.availability.user1) {
+            avail.adryan = parsed.availability.adryan || parsed.availability.user1;
+          }
+          if (parsed.availability.kah || parsed.availability.user2) {
+            avail.kah = parsed.availability.kah || parsed.availability.user2;
+          }
+          parsed.availability = { ...INITIAL_AVAILABILITY, ...avail };
+        }
+
         return parsed;
       }
     }
@@ -125,15 +153,17 @@ export function saveLocalData(data) {
 // Usuário ativo no aparelho atual
 export function getActiveUserId() {
   try {
-    return localStorage.getItem(ACTIVE_USER_KEY) || 'user1';
+    const stored = localStorage.getItem(ACTIVE_USER_KEY);
+    return normalizeUserId(stored);
   } catch (e) {
-    return 'user1';
+    return 'adryan';
   }
 }
 
 export function setActiveUserId(userId) {
   try {
-    localStorage.setItem(ACTIVE_USER_KEY, userId);
+    const normalized = normalizeUserId(userId);
+    localStorage.setItem(ACTIVE_USER_KEY, normalized);
   } catch (e) {}
 }
 
@@ -195,7 +225,7 @@ export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange
 
       // Ignora se for eco da própria alteração se houver id do cliente
       const activeUser = getActiveUserId();
-      if (payload.senderId && payload.senderId === activeUser && payload.type !== 'REQUEST_FULL_STATE') {
+      if (payload.senderId && normalizeUserId(payload.senderId) === activeUser && payload.type !== 'REQUEST_FULL_STATE') {
         return;
       }
 

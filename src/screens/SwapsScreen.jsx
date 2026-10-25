@@ -10,6 +10,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { playChimeSound } from '../services/notificationService';
+import { normalizeUserId } from '../constants/initialData';
 
 export function SwapsScreen({
   activeUser,
@@ -24,19 +25,19 @@ export function SwapsScreen({
   const [selectedTaskInstanceId, setSelectedTaskInstanceId] = useState('');
   const [swapNote, setSwapNote] = useState('');
 
-  const otherUser = users.find((u) => u.id !== activeUser.id) || users[1];
+  const otherUser = users.find((u) => normalizeUserId(u.id) !== activeUser.id) || users[1];
 
   // Minhas tarefas que posso pedir para trocar
   const myPendingTasks = schedule.filter(
-    (t) => t.assignedTo === activeUser.id && !t.completed
+    (t) => normalizeUserId(t.assignedTo) === activeUser.id && !t.completed
   );
 
   const pendingForMe = swaps.filter(
-    (s) => s.toUserId === activeUser.id && s.status === 'pending'
+    (s) => normalizeUserId(s.toUserId) === activeUser.id && s.status === 'pending'
   );
 
   const myOutgoingRequests = swaps.filter(
-    (s) => s.fromUserId === activeUser.id && s.status === 'pending'
+    (s) => normalizeUserId(s.fromUserId) === activeUser.id && s.status === 'pending'
   );
 
   const historySwaps = swaps.filter((s) => s.status !== 'pending');

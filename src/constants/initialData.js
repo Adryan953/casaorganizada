@@ -1,6 +1,16 @@
 // Dados Padrão Iniciais do Aplicativo "Casa em Paz"
 // Configurado com base na rotina real da casa (2 quartos, sala, cozinha, quintal com plantas e gatos)
 
+// Função auxiliar para garantir normalização de identificadores (Kah vs Adryan)
+export function normalizeUserId(val) {
+  if (!val) return 'adryan';
+  const s = String(val).trim().toLowerCase();
+  if (s === 'kah' || s === 'user2' || s === 'kassandra' || s.includes('kah')) {
+    return 'kah';
+  }
+  return 'adryan';
+}
+
 export const DEFAULT_USERS = [
   {
     id: 'adryan',

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { playChimeSound } from '../services/notificationService';
 import { formatDateKey } from '../services/schedulerService';
-import { ENCOURAGING_QUOTES, CATEGORIES } from '../constants/initialData';
+import { ENCOURAGING_QUOTES, CATEGORIES, normalizeUserId } from '../constants/initialData';
 
 export function TodayScreen({
   activeUser,
@@ -29,15 +29,16 @@ export function TodayScreen({
   const [celebrationMessage, setCelebrationMessage] = useState(null);
 
   const todayKey = formatDateKey(new Date());
-  const otherUser = users.find((u) => u.id !== activeUser.id) || users[1];
+  const otherUser = users.find((u) => normalizeUserId(u.id) !== activeUser.id) || users[1];
 
   // Tarefas agendadas para hoje
   const todayTasks = schedule.filter((item) => item.date === todayKey);
 
   // Filtragem
   const displayedTasks = todayTasks.filter((item) => {
-    if (filterMode === 'mine') return item.assignedTo === activeUser.id;
-    if (filterMode === 'partner') return item.assignedTo === otherUser?.id;
+    const assigned = normalizeUserId(item.assignedTo);
+    if (filterMode === 'mine') return assigned === activeUser.id;
+    if (filterMode === 'partner') return assigned === otherUser?.id;
     return true; // 'all'
   });
 

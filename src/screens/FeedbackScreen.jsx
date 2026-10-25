@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { playChimeSound } from '../services/notificationService';
 import { isUserInWorkHours } from '../services/schedulerService';
+import { normalizeUserId } from '../constants/initialData';
 
 export function FeedbackScreen({
   activeUser,
@@ -35,13 +36,13 @@ export function FeedbackScreen({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedImage, setExpandedImage] = useState(null);
 
-  const otherUser = users.find((u) => u.id !== activeUser.id) || users[1];
+  const otherUser = users.find((u) => normalizeUserId(u.id) !== activeUser.id) || users[1];
   const isPartnerWorkingNow = isUserInWorkHours(availability, otherUser?.id);
 
   // Reclamações que eu recebi do meu parceiro
-  const receivedFeedbacks = feedbacks.filter((f) => f.toUserId === activeUser.id);
+  const receivedFeedbacks = feedbacks.filter((f) => normalizeUserId(f.toUserId) === activeUser.id);
   // Reclamações que eu enviei para o meu parceiro
-  const sentFeedbacks = feedbacks.filter((f) => f.fromUserId === activeUser.id);
+  const sentFeedbacks = feedbacks.filter((f) => normalizeUserId(f.fromUserId) === activeUser.id);
 
   // Compressão e carregamento da foto via Câmera/Galeria
   const handleImageChange = (e) => {

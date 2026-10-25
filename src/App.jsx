@@ -26,6 +26,7 @@ import {
   stopAttentionAlarmLoop
 } from './services/notificationService';
 import { getCurrentAuthUser, logout } from './services/authService';
+import { normalizeUserId, DEFAULT_USERS } from './constants/initialData';
 import {
   insertFeedbackSupabase,
   updateFeedbackSupabase,
@@ -90,23 +91,26 @@ export default function App() {
           if (eventType === 'INSERT') {
             if (!updatedList.some((f) => f.id === feedback.id)) {
               updatedList = [feedback, ...updatedList];
-              const myId = currentUser?.id || getActiveUserId();
-              
-              // Se estiver agendado para quando sair do trabalho e a pessoa ainda está trabalhando, não dispara alarme agora
-              const isWorking = isUserInWorkHours(prev.availability, myId);
-              const shouldHoldForAfterWork = feedback.notifyAfterWork && !feedback.delivered && isWorking;
+              const myId = normalizeUserId(currentUser?.id || currentUser?.username || getActiveUserId());
+              const fromId = normalizeUserId(feedback.fromUserId);
+              const toId = normalizeUserId(feedback.toUserId);
 
-              if (!shouldHoldForAfterWork) {
-                // Se foi o parceiro que enviou e é tom de Atenção ou Urgente: toca alarme que só para no clique!
-                if ((feedback.severity === 'warning' || feedback.severity === 'urgent') && feedback.fromUserId !== myId) {
-                  const partner = (prev.users || []).find((u) => u.id === feedback.fromUserId);
-                  startAttentionAlarmLoop();
-                  setActiveAttentionAlarm({
-                    ...feedback,
-                    fromUserName: partner?.name || 'Seu Parceiro'
-                  });
-                } else if (feedback.fromUserId !== myId) {
-                  try { playChimeSound(); } catch (e) {}
+              // Alarme e notificação só disparam se foi enviado PELO PARCEIRO e É PARA MIM!
+              if (fromId !== myId && toId === myId) {
+                const isWorking = isUserInWorkHours(prev.availability, myId);
+                const shouldHoldForAfterWork = feedback.notifyAfterWork && !feedback.delivered && isWorking;
+
+                if (!shouldHoldForAfterWork) {
+                  if (feedback.severity === 'warning' || feedback.severity === 'urgent') {
+                    const partner = (prev.users || []).find((u) => normalizeUserId(u.id) === fromId);
+                    startAttentionAlarmLoop();
+                    setActiveAttentionAlarm({
+                      ...feedback,
+                      fromUserName: partner?.name || (fromId === 'kah' ? 'Kah' : 'Adryan')
+                    });
+                  } else {
+                    try { playChimeSound(); } catch (e) {}
+                  }
                 }
               }
             }
@@ -145,7 +149,7 @@ export default function App() {
       },
       (actionPayload) => {
         if (!actionPayload) return;
-        const myId = currentUser?.id || getActiveUserId();
+        const myId = normalizeUserId(currentUser?.id || currentUser?.username || getActiveUserId());
 
         // Parceiro cancelou o desabafo: interrompe o alarme imediatamente se estiver tocando
         if (actionPayload.type === 'FEEDBACK_CANCEL' && actionPayload.feedbackId) {
@@ -161,16 +165,21 @@ export default function App() {
 
         if (actionPayload.type === 'FEEDBACK_CREATE' && actionPayload.feedback) {
           const fb = actionPayload.feedback;
-          const isWorking = isUserInWorkHours(appData.availability, myId);
-          const shouldHoldForAfterWork = fb.notifyAfterWork && !fb.delivered && isWorking;
+          const fromId = normalizeUserId(fb.fromUserId);
+          const toId = normalizeUserId(fb.toUserId);
 
-          if (!shouldHoldForAfterWork && (fb.severity === 'warning' || fb.severity === 'urgent') && fb.fromUserId !== myId) {
-            const partner = (appData.users || []).find((u) => u.id === fb.fromUserId);
-            startAttentionAlarmLoop();
-            setActiveAttentionAlarm({
-              ...fb,
-              fromUserName: partner?.name || 'Seu Parceiro'
-            });
+          if (fromId !== myId && toId === myId) {
+            const isWorking = isUserInWorkHours(appData.availability, myId);
+            const shouldHoldForAfterWork = fb.notifyAfterWork && !fb.delivered && isWorking;
+
+            if (!shouldHoldForAfterWork && (fb.severity === 'warning' || fb.severity === 'urgent')) {
+              const partner = (appData.users || []).find((u) => normalizeUserId(u.id) === fromId);
+              startAttentionAlarmLoop();
+              setActiveAttentionAlarm({
+                ...fb,
+                fromUserName: partner?.name || (fromId === 'kah' ? 'Kah' : 'Adryan')
+              });
+            }
           }
         }
       }
@@ -255,17 +264,48 @@ export default function App() {
     return () => clearInterval(interval);
   }, [appData.weeklySchedule, appData.feedbacks, appData.availability, currentUser]);
 
-  const activeUser =
-    (appData.users || []).find((u) => u.id === (currentUser?.id || getActiveUserId())) || appData.users[0];
+  const activeId = normalizeUserId(currentUser?.id || currentUser?.username || getActiveUserId());
 
-  // Alterna usuário ativo no aparelho
-  const handleSwitchUser = (userId) => {
-    const targetUser = (appData.users || []).find((u) => u.id === userId);
-    if (targetUser) {
-      setCurrentUser(targetUser);
-      setActiveUserId(userId);
+  const activeUser =
+    (appData.users || []).find((u) => normalizeUserId(u.id || u.username) === activeId) || {
+      id: activeId,
+      username: activeId === 'kah' ? 'Kah' : 'Adryan',
+      name: activeId === 'kah' ? 'Kah' : 'Adryan',
+      avatar: activeId === 'kah' ? '👩‍🦰' : '🧔‍♂️',
+      color: activeId === 'kah' ? '#ec4899' : '#3b82f6',
+      role: activeId === 'kah' ? 'Parceira' : 'Parceiro'
+    };
+
+  const partnerId = activeId === 'adryan' ? 'kah' : 'adryan';
+
+  const otherUser =
+    (appData.users || []).find((u) => normalizeUserId(u.id || u.username) === partnerId) || {
+      id: partnerId,
+      username: partnerId === 'kah' ? 'Kah' : 'Adryan',
+      name: partnerId === 'kah' ? 'Kah' : 'Adryan',
+      avatar: partnerId === 'kah' ? '👩‍🦰' : '🧔‍♂️',
+      color: partnerId === 'kah' ? '#ec4899' : '#3b82f6',
+      role: partnerId === 'kah' ? 'Parceira' : 'Parceiro'
+    };
+
+  const coupleUsers = [
+    (appData.users || []).find((u) => normalizeUserId(u.id) === 'adryan') || {
+      id: 'adryan',
+      username: 'Adryan',
+      name: 'Adryan',
+      avatar: '🧔‍♂️',
+      color: '#3b82f6',
+      role: 'Parceiro'
+    },
+    (appData.users || []).find((u) => normalizeUserId(u.id) === 'kah') || {
+      id: 'kah',
+      username: 'Kah',
+      name: 'Kah',
+      avatar: '👩‍🦰',
+      color: '#ec4899',
+      role: 'Parceira'
     }
-  };
+  ];
 
   const handleLogout = () => {
     logout();
@@ -595,13 +635,13 @@ export default function App() {
     return <LoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
-  // Contadores de badges
+  // Contadores de badges individuais para quem está com o celular
   const pendingSwapsCount = (appData.swaps || []).filter(
-    (s) => s.toUserId === activeUser.id && s.status === 'pending'
+    (s) => normalizeUserId(s.toUserId) === activeId && s.status === 'pending'
   ).length;
 
   const unreadFeedbacksCount = (appData.feedbacks || []).filter(
-    (f) => f.toUserId === activeUser.id && f.status !== 'resolved'
+    (f) => normalizeUserId(f.toUserId) === activeId && f.status !== 'resolved'
   ).length;
 
   return (
@@ -609,8 +649,7 @@ export default function App() {
       {/* Top Header */}
       <Header
         activeUser={activeUser}
-        users={appData.users}
-        onSwitchUser={handleSwitchUser}
+        users={coupleUsers}
         syncStatus={syncStatus}
         coupleCode={appData.coupleCode}
         theme={theme}
@@ -624,7 +663,7 @@ export default function App() {
         {activeScreen === 'today' && (
           <TodayScreen
             activeUser={activeUser}
-            users={appData.users}
+            users={coupleUsers}
             schedule={appData.weeklySchedule}
             onUpdateTaskStatus={handleUpdateTaskStatus}
             onDelegateTask={handleDelegateTask}
@@ -637,7 +676,7 @@ export default function App() {
 
         {activeScreen === 'week' && (
           <WeekScreen
-            users={appData.users}
+            users={coupleUsers}
             schedule={appData.weeklySchedule}
             onRegenerateWeek={handleRegenerateWeek}
             onUpdateTaskStatus={handleUpdateTaskStatus}
@@ -646,7 +685,7 @@ export default function App() {
 
         {activeScreen === 'balance' && (
           <BalanceScreen
-            users={appData.users}
+            users={coupleUsers}
             schedule={appData.weeklySchedule}
             targetRatio={appData.targetRatio}
           />
@@ -655,7 +694,7 @@ export default function App() {
         {activeScreen === 'tasks' && (
           <TasksScreen
             tasks={appData.tasks}
-            users={appData.users}
+            users={coupleUsers}
             onSaveTask={handleSaveTask}
             onDeleteTask={handleDeleteTask}
           />
@@ -664,7 +703,7 @@ export default function App() {
         {activeScreen === 'feedbacks' && (
           <FeedbackScreen
             activeUser={activeUser}
-            users={appData.users}
+            users={coupleUsers}
             feedbacks={appData.feedbacks || []}
             availability={appData.availability}
             onCreateFeedback={handleCreateFeedback}
@@ -676,7 +715,7 @@ export default function App() {
 
         {activeScreen === 'availability' && (
           <AvailabilityScreen
-            users={appData.users}
+            users={coupleUsers}
             activeUser={activeUser}
             availability={appData.availability}
             onSaveAvailability={handleSaveAvailability}
@@ -687,7 +726,7 @@ export default function App() {
         {activeScreen === 'swaps' && (
           <SwapsScreen
             activeUser={activeUser}
-            users={appData.users}
+            users={coupleUsers}
             swaps={appData.swaps}
             onAcceptSwap={handleAcceptSwap}
             onDeclineSwap={handleDeclineSwap}
@@ -698,7 +737,7 @@ export default function App() {
 
         {activeScreen === 'settings' && (
           <SettingsScreen
-            users={appData.users}
+            users={coupleUsers}
             activeUser={activeUser}
             coupleCode={appData.coupleCode}
             targetRatio={appData.targetRatio}

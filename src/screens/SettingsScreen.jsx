@@ -17,6 +17,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import { sendTestNotification } from '../services/notificationService';
+import { normalizeUserId } from '../constants/initialData';
 
 export function SettingsScreen({
   users = [],
@@ -35,9 +36,13 @@ export function SettingsScreen({
 }) {
   const [copied, setCopied] = useState(false);
   const [inputCode, setInputCode] = useState('');
+
+  const userAdryan = users.find((u) => normalizeUserId(u.id) === 'adryan') || users[0];
+  const userKah = users.find((u) => normalizeUserId(u.id) === 'kah') || users[1];
+
   const [names, setNames] = useState({
-    user1: users[0]?.name || 'Adryan',
-    user2: users[1]?.name || 'Kah'
+    user1: userAdryan?.name || 'Adryan',
+    user2: userKah?.name || 'Kah'
   });
   const [ratioVal, setRatioVal] = useState(targetRatio.user1 || 50);
 
@@ -80,12 +85,12 @@ export function SettingsScreen({
     alert(`Conectando ao casal com o código: ${inputCode.toUpperCase().trim()}!`);
   };
 
-  // Salvar nomes
+  // Salvar nomes preservando IDs limpos
   const handleSaveNames = (e) => {
     e.preventDefault();
     const updated = [
-      { ...users[0], name: names.user1.trim() || 'Adryan' },
-      { ...users[1], name: names.user2.trim() || 'Kah' }
+      { ...(userAdryan || {}), id: 'adryan', name: names.user1.trim() || 'Adryan' },
+      { ...(userKah || {}), id: 'kah', name: names.user2.trim() || 'Kah' }
     ];
     onUpdateUsers(updated);
     alert('Nomes atualizados com sucesso!');

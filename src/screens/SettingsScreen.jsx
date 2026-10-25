@@ -5,19 +5,15 @@ import {
   Copy,
   Check,
   Share2,
-  Database,
   Bell,
   Moon,
   Sun,
   RotateCcw,
   Sliders,
   LogOut,
-  ExternalLink,
-  ShieldCheck,
-  Heart
+  Sparkles
 } from 'lucide-react';
 import { sendTestNotification } from '../services/notificationService';
-import { getStoredSupabaseConfig, saveStoredSupabaseConfig, getSupabase } from '../services/supabaseService';
 
 export function SettingsScreen({
   users = [],
@@ -40,14 +36,6 @@ export function SettingsScreen({
     user2: users[1]?.name || 'Kah'
   });
   const [ratioVal, setRatioVal] = useState(targetRatio.user1 || 50);
-
-  // Supabase Config State
-  const [supabaseConfig, setSupabaseConfig] = useState(() => {
-    const saved = getStoredSupabaseConfig();
-    return saved || { url: '', anonKey: '' };
-  });
-  const [supabaseSaved, setSupabaseSaved] = useState(false);
-  const [showSupabaseGuide, setShowSupabaseGuide] = useState(false);
 
   // Copiar código do casal
   const handleCopyCode = () => {
@@ -79,21 +67,6 @@ export function SettingsScreen({
     alert('Nomes atualizados com sucesso!');
   };
 
-  // Salvar Supabase Config
-  const handleSaveSupabase = (e) => {
-    e.preventDefault();
-    if (!supabaseConfig.url || !supabaseConfig.anonKey) {
-      alert('Preencha a URL e a Anon Key do seu projeto Supabase.');
-      return;
-    }
-    saveStoredSupabaseConfig(supabaseConfig.url, supabaseConfig.anonKey);
-    setSupabaseSaved(true);
-    setTimeout(() => {
-      setSupabaseSaved(false);
-      window.location.reload();
-    }, 1500);
-  };
-
   // Alterar meta de divisão
   const handleRatioChange = (val) => {
     setRatioVal(val);
@@ -103,14 +76,12 @@ export function SettingsScreen({
     });
   };
 
-  const isSupabaseConnected = Boolean(getSupabase());
-
   return (
     <div>
       <div style={{ marginBottom: '16px' }}>
         <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>Configurações do Casal</h2>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          Gerencie seu perfil, conexão em nuvem, banco de dados e preferências.
+          Ajustes de perfil, divisão e preferências da casa.
         </p>
       </div>
 
@@ -118,11 +89,11 @@ export function SettingsScreen({
       <div className="card" style={{ borderColor: 'var(--accent-primary)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
           <Share2 size={18} color="var(--accent-primary)" />
-          <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Conectar os 2 Celulares</h3>
+          <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Código do Casal</h3>
         </div>
 
         <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-          Código padrão ativo para Adryan e Kah:
+          Ambos já estão conectados automaticamente nesta sala de sincronia:
         </p>
 
         <div
@@ -138,7 +109,7 @@ export function SettingsScreen({
           }}
         >
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Código de Sincronia:</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sala Ativa:</div>
             <div style={{ fontSize: '1.3rem', fontWeight: '800', letterSpacing: '0.05em', color: 'var(--accent-primary)' }}>
               {coupleCode}
             </div>
@@ -149,7 +120,7 @@ export function SettingsScreen({
           </button>
         </div>
 
-        {/* Entrar em um código existente */}
+        {/* Mudar código se quiser */}
         <form onSubmit={handleJoinCouple} style={{ marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
           <label className="form-label">Quer mudar o código do casal?</label>
           <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
@@ -168,93 +139,7 @@ export function SettingsScreen({
         </form>
       </div>
 
-      {/* BLOCO 2: Banco de Dados Supabase */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Database size={18} color="var(--accent-primary)" />
-            <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Banco de Dados (Supabase)</h3>
-          </div>
-          <span
-            style={{
-              fontSize: '0.72rem',
-              fontWeight: '700',
-              padding: '2px 8px',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: isSupabaseConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
-              color: isSupabaseConnected ? 'var(--accent-primary)' : 'var(--text-muted)'
-            }}
-          >
-            {isSupabaseConnected ? '● Supabase Conectado' : '○ Modo WebSocket Nativo'}
-          </span>
-        </div>
-
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-          O app já sincroniza em tempo real pelo canal do casal! Para persistência definitiva com histórico no seu próprio banco de dados Postgres gratuito, insira suas credenciais do Supabase.
-        </p>
-
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ width: '100%', padding: '8px 12px', fontSize: '0.82rem', marginBottom: '12px' }}
-          onClick={() => setShowSupabaseGuide(!showSupabaseGuide)}
-        >
-          <span>{showSupabaseGuide ? 'Ocultar Guia do Supabase' : 'Como criar o Supabase em 2 minutos (Guia)'}</span>
-        </button>
-
-        {showSupabaseGuide && (
-          <div
-            style={{
-              backgroundColor: 'var(--bg-app)',
-              padding: '12px 14px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
-              marginBottom: '14px',
-              fontSize: '0.8rem',
-              color: 'var(--text-secondary)',
-              lineHeight: '1.5'
-            }}
-          >
-            <strong style={{ color: 'var(--text-primary)' }}>Passo a passo no Supabase (100% Gratuito):</strong>
-            <ol style={{ paddingLeft: '18px', marginTop: '6px' }}>
-              <li>Acesse <strong>supabase.com</strong> e crie uma conta gratuita (pode usar o GitHub).</li>
-              <li>Clique em <strong>"New Project"</strong> e dê o nome: <code>casa-em-paz</code>.</li>
-              <li>Vá em <strong>Project Settings ➔ API</strong> e copie a <strong>Project URL</strong> e a <strong>anon public key</strong>.</li>
-              <li>Cole nos campos abaixo e clique em Salvar!</li>
-            </ol>
-          </div>
-        )}
-
-        <form onSubmit={handleSaveSupabase}>
-          <div className="form-group">
-            <label className="form-label">Project URL</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="https://xyzcompany.supabase.co"
-              value={supabaseConfig.url}
-              onChange={(e) => setSupabaseConfig({ ...supabaseConfig, url: e.target.value.trim() })}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">API Anon Key</label>
-            <input
-              type="password"
-              className="form-input"
-              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-              value={supabaseConfig.anonKey}
-              onChange={(e) => setSupabaseConfig({ ...supabaseConfig, anonKey: e.target.value.trim() })}
-            />
-          </div>
-
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '10px', marginTop: '4px' }}>
-            {supabaseSaved ? 'Salvo e Reiniciando...' : 'Salvar e Conectar Supabase'}
-          </button>
-        </form>
-      </div>
-
-      {/* BLOCO 3: Nomes dos Parceiros */}
+      {/* BLOCO 2: Nomes dos Parceiros */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <Users size={18} />
@@ -288,7 +173,7 @@ export function SettingsScreen({
         </form>
       </div>
 
-      {/* BLOCO 4: Meta de Divisão (50/50 ou ajustável) */}
+      {/* BLOCO 3: Meta de Divisão (50/50 ou ajustável) */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
           <Sliders size={18} />
@@ -314,7 +199,7 @@ export function SettingsScreen({
         />
       </div>
 
-      {/* BLOCO 5: Notificações e Testes */}
+      {/* BLOCO 4: Notificações e Testes */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
           <Bell size={18} />
@@ -334,7 +219,7 @@ export function SettingsScreen({
         </button>
       </div>
 
-      {/* BLOCO 6: Tema, Restauração e Logout */}
+      {/* BLOCO 5: Tema, Restauração e Logout */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

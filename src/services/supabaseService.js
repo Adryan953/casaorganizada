@@ -1,52 +1,29 @@
 // Cliente e Serviços do Supabase para o Aplicativo "Casa em Paz"
-// Suporta sincronização de tarefas, estado do casal e canal de reclamações/desabafos com fotos.
+// Lê as chaves diretamente do arquivo de configuração do código (src/config/supabaseConfig.js).
 
 import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_CONFIG_KEY = 'casa_em_paz_supabase_cfg';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/supabaseConfig';
 
 let supabase = null;
 
-// Recupera credenciais salvas localmente
-export function getStoredSupabaseConfig() {
-  try {
-    const raw = localStorage.getItem(SUPABASE_CONFIG_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) {
-    return null;
-  }
-}
+// Inicializa o cliente do Supabase diretamente com as chaves do código
+export function initSupabase() {
+  const url = (SUPABASE_URL || '').trim();
+  const key = (SUPABASE_ANON_KEY || '').trim();
 
-// Salva credenciais do Supabase
-export function saveStoredSupabaseConfig(url, anonKey) {
-  try {
-    const config = { url: url.trim(), anonKey: anonKey.trim() };
-    localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify(config));
-    initSupabase(config.url, config.anonKey);
-    return true;
-  } catch (e) {
-    console.error('Erro ao salvar configuração do Supabase:', e);
-    return false;
-  }
-}
-
-// Inicializa o cliente do Supabase
-export function initSupabase(customUrl = null, customKey = null) {
-  const cfg = customUrl && customKey ? { url: customUrl, anonKey: customKey } : getStoredSupabaseConfig();
-
-  if (!cfg || !cfg.url || !cfg.anonKey) {
+  if (!url || !key) {
     supabase = null;
     return null;
   }
 
   try {
-    supabase = createClient(cfg.url, cfg.anonKey, {
+    supabase = createClient(url, key, {
       auth: { persistSession: true },
       realtime: { params: { eventsPerSecond: 10 } }
     });
     return supabase;
   } catch (err) {
-    console.warn('Falha ao inicializar cliente Supabase:', err);
+    console.warn('Falha ao inicializar Supabase a partir do código:', err);
     supabase = null;
     return null;
   }
@@ -78,7 +55,7 @@ export async function insertFeedbackSupabase(feedbackItem) {
           to_user_id: feedbackItem.toUserId,
           title: feedbackItem.title,
           description: feedbackItem.description,
-          image_url: feedbackItem.image || null, // Base64 ou URL
+          image_url: feedbackItem.image || null,
           severity: feedbackItem.severity || 'gentle',
           status: feedbackItem.status || 'pending',
           response_note: feedbackItem.responseNote || null,
@@ -123,6 +100,41 @@ export async function updateFeedbackSupabase(feedbackId, updates) {
 }
 
 /**
+ * Busca todos os feedbacks salvos no Supabase para a sala do casal
+ */
+export async function fetchFeedbacksSupabase(coupleCode) {
+  const client = getSupabase();
+  if (!client) return [];
+
+  try {
+    const { data, error } = await client
+      .from('feedbacks')
+      .select('*')
+      .eq('couple_code', coupleCode || 'CASAL-PAZ')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map((row) => ({
+      id: row.id,
+      coupleCode: row.couple_code,
+      fromUserId: row.from_user_id,
+      toUserId: row.to_user_id,
+      title: row.title,
+      description: row.description,
+      image: row.image_url,
+      severity: row.severity,
+      status: row.status,
+      responseNote: row.response_note,
+      createdAt: row.created_at,
+      resolvedAt: row.resolved_at
+    }));
+  } catch (err) {
+    console.warn('Erro ao carregar feedbacks do Supabase:', err);
+    return [];
+  }
+}
+
+/**
  * Escuta reclamações em tempo real no Supabase
  */
 export function subscribeToSupabaseFeedbacks(coupleCode, onFeedbackChanged) {
@@ -141,7 +153,24 @@ export function subscribeToSupabaseFeedbacks(coupleCode, onFeedbackChanged) {
           filter: `couple_code=eq.${coupleCode || 'CASAL-PAZ'}`
         },
         (payload) => {
-          onFeedbackChanged(payload);
+          if (payload && payload.new) {
+            const row = payload.new;
+            const mapped = {
+              id: row.id,
+              coupleCode: row.couple_code,
+              fromUserId: row.from_user_id,
+              toUserId: row.to_user_id,
+              title: row.title,
+              description: row.description,
+              image: row.image_url,
+              severity: row.severity,
+              status: row.status,
+              responseNote: row.response_note,
+              createdAt: row.created_at,
+              resolvedAt: row.resolved_at
+            };
+            onFeedbackChanged({ eventType: payload.eventType, feedback: mapped });
+          }
         }
       )
       .subscribe();

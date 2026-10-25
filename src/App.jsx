@@ -21,7 +21,13 @@ import {
 import { generateWeeklySchedule, formatDateKey } from './services/schedulerService';
 import { triggerNotification, playChimeSound } from './services/notificationService';
 import { getCurrentAuthUser, logout } from './services/authService';
-import { insertFeedbackSupabase, updateFeedbackSupabase, initSupabase } from './services/supabaseService';
+import {
+  insertFeedbackSupabase,
+  updateFeedbackSupabase,
+  initSupabase,
+  fetchFeedbacksSupabase,
+  subscribeToSupabaseFeedbacks
+} from './services/supabaseService';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => getCurrentAuthUser());
@@ -32,10 +38,43 @@ export default function App() {
   });
   const [syncStatus, setSyncStatus] = useState({ online: true, reason: 'connecting', mode: 'realtime' });
 
-  // Inicializa Supabase em segundo plano se configurado
+  // Inicializa Supabase e sincroniza feedbacks do banco
   useEffect(() => {
     initSupabase();
-  }, []);
+
+    // Carrega feedbacks salvos na nuvem
+    fetchFeedbacksSupabase(appData.coupleCode).then((cloudFeedbacks) => {
+      if (cloudFeedbacks && cloudFeedbacks.length > 0) {
+        setAppData((prev) => {
+          const existingIds = new Set((prev.feedbacks || []).map((f) => f.id));
+          const toAdd = cloudFeedbacks.filter((cf) => !existingIds.has(cf.id));
+          if (toAdd.length === 0) return prev;
+          return { ...prev, feedbacks: [...toAdd, ...(prev.feedbacks || [])] };
+        });
+      }
+    });
+
+    // Escuta novos feedbacks em tempo real via Supabase Realtime
+    const unsubFeedbacks = subscribeToSupabaseFeedbacks(appData.coupleCode, ({ eventType, feedback }) => {
+      if (!feedback) return;
+      setAppData((prev) => {
+        let updatedList = [...(prev.feedbacks || [])];
+        if (eventType === 'INSERT') {
+          if (!updatedList.some((f) => f.id === feedback.id)) {
+            updatedList = [feedback, ...updatedList];
+            try { playChimeSound(); } catch (e) {}
+          }
+        } else if (eventType === 'UPDATE') {
+          updatedList = updatedList.map((f) => (f.id === feedback.id ? { ...f, ...feedback } : f));
+        }
+        return { ...prev, feedbacks: updatedList };
+      });
+    });
+
+    return () => {
+      if (unsubFeedbacks) unsubFeedbacks();
+    };
+  }, [appData.coupleCode]);
 
   // Aplica o tema visual no elemento HTML
   useEffect(() => {

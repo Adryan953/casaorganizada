@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { TodayScreen } from './screens/TodayScreen';
@@ -26,7 +26,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('casa_em_paz_theme') || 'light';
   });
-  const [syncStatus, setSyncStatus] = useState({ online: false, reason: 'init' });
+  const [syncStatus, setSyncStatus] = useState({ online: true, reason: 'connecting', mode: 'realtime' });
 
   // Aplica o tema visual no elemento HTML
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function App() {
     localStorage.setItem('casa_em_paz_theme', theme);
   }, [theme]);
 
-  // Sincronização em tempo real (Firebase / Local)
+  // Sincronização em tempo real (WebSocket + Nuvem)
   useEffect(() => {
     const unsubscribe = subscribeToCouple(
       appData.coupleCode,
@@ -95,14 +95,15 @@ export default function App() {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Atualizar Status da Tarefa (Concluída ou Aberta)
+  // Atualizar Status da Tarefa (Concluída ou Aberta) - Sincronizado instantaneamente
   const handleUpdateTaskStatus = (instanceId, completed) => {
+    const completedAt = completed ? new Date().toISOString() : null;
     const updatedSchedule = (appData.weeklySchedule || []).map((item) => {
       if (item.instanceId === instanceId) {
         return {
           ...item,
           completed,
-          completedAt: completed ? new Date().toISOString() : null
+          completedAt
         };
       }
       return item;
@@ -110,10 +111,17 @@ export default function App() {
 
     const updatedData = { ...appData, weeklySchedule: updatedSchedule };
     setAppData(updatedData);
-    syncSaveData(updatedData);
+
+    // Transmite o evento em tempo real via canal do casal
+    syncSaveData(updatedData, {
+      type: 'TASK_STATUS',
+      instanceId,
+      completed,
+      completedAt
+    });
   };
 
-  // Passar Tarefa para o Parceiro (com carinho)
+  // Passar Tarefa para o Parceiro (com carinho) - Sincronizado instantaneamente
   const handleDelegateTask = (instanceId, toUserId) => {
     const partner = (appData.users || []).find((u) => u.id === toUserId);
     const updatedSchedule = (appData.weeklySchedule || []).map((item) => {
@@ -128,23 +136,30 @@ export default function App() {
 
     const updatedData = { ...appData, weeklySchedule: updatedSchedule };
     setAppData(updatedData);
-    syncSaveData(updatedData);
+
+    syncSaveData(updatedData, {
+      type: 'TASK_DELEGATE',
+      instanceId,
+      toUserId
+    });
 
     alert(`Tarefa passada com amor para ${partner?.name || 'seu parceiro'}! 💖`);
   };
 
-  // Adiar Tarefa para Amanhã (sem culpa)
+  // Adiar Tarefa para Amanhã (sem culpa) - Sincronizado instantaneamente
   const handlePostponeTask = (instanceId) => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowKey = formatDateKey(tomorrow);
+    let newInstanceId = instanceId;
 
     const updatedSchedule = (appData.weeklySchedule || []).map((item) => {
       if (item.instanceId === instanceId) {
+        newInstanceId = `${item.taskId}_${tomorrowKey}`;
         return {
           ...item,
           date: tomorrowKey,
-          instanceId: `${item.taskId}_${tomorrowKey}`
+          instanceId: newInstanceId
         };
       }
       return item;
@@ -152,23 +167,33 @@ export default function App() {
 
     const updatedData = { ...appData, weeklySchedule: updatedSchedule };
     setAppData(updatedData);
-    syncSaveData(updatedData);
+
+    syncSaveData(updatedData, {
+      type: 'TASK_POSTPONE',
+      instanceId,
+      newDate: tomorrowKey,
+      newInstanceId
+    });
 
     alert('Tarefa transferida para amanhã com tranquilidade! Descanse hoje. ✨');
   };
 
-  // Criar Pedido de Troca
+  // Criar Pedido de Troca - Sincronizado instantaneamente
   const handleCreateSwap = (newSwap) => {
     const updatedSwaps = [newSwap, ...(appData.swaps || [])];
     const updatedData = { ...appData, swaps: updatedSwaps };
     setAppData(updatedData);
-    syncSaveData(updatedData);
+
+    syncSaveData(updatedData, {
+      type: 'SWAP_CREATE',
+      swap: newSwap
+    });
+
     alert('Pedido de troca enviado com sucesso! 🤝');
   };
 
-  // Aceitar Troca
+  // Aceitar Troca - Sincronizado instantaneamente
   const handleAcceptSwap = (swap) => {
-    // Transfere a tarefa para quem aceitou
     const updatedSchedule = (appData.weeklySchedule || []).map((item) => {
       if (item.instanceId === swap.taskInstanceId) {
         return {
@@ -179,7 +204,6 @@ export default function App() {
       return item;
     });
 
-    // Atualiza status do pedido
     const updatedSwaps = (appData.swaps || []).map((s) => {
       if (s.id === swap.id) {
         return { ...s, status: 'accepted', resolvedAt: new Date().toISOString() };
@@ -194,11 +218,19 @@ export default function App() {
     };
 
     setAppData(updatedData);
-    syncSaveData(updatedData);
+
+    syncSaveData(updatedData, {
+      type: 'SWAP_RESOLVE',
+      swapId: swap.id,
+      status: 'accepted',
+      taskInstanceId: swap.taskInstanceId,
+      toUserId: swap.toUserId
+    });
+
     alert('Troca aceita! A tarefa agora está na sua lista com muito carinho. 💖');
   };
 
-  // Recusar Troca com Gentileza
+  // Recusar Troca com Gentileza - Sincronizado instantaneamente
   const handleDeclineSwap = (swapId) => {
     const updatedSwaps = (appData.swaps || []).map((s) => {
       if (s.id === swapId) {
@@ -209,7 +241,12 @@ export default function App() {
 
     const updatedData = { ...appData, swaps: updatedSwaps };
     setAppData(updatedData);
-    syncSaveData(updatedData);
+
+    syncSaveData(updatedData, {
+      type: 'SWAP_RESOLVE',
+      swapId,
+      status: 'declined'
+    });
   };
 
   // Salvar Tarefa (Criar ou Editar)

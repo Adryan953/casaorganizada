@@ -5,7 +5,7 @@ export function Header({
   activeUser,
   users = [],
   onSwitchUser,
-  syncStatus = { online: false },
+  syncStatus = { online: true },
   coupleCode,
   theme,
   onToggleTheme,
@@ -24,28 +24,40 @@ export function Header({
           <div>
             <h1 className="brand-title">Casa em Paz</h1>
             <p className="brand-subtitle">
-              Código: <strong style={{ color: 'var(--accent-primary)' }}>{coupleCode}</strong>
+              Casal: <strong style={{ color: 'var(--accent-primary)', letterSpacing: '0.04em' }}>{coupleCode}</strong>
             </p>
           </div>
         </div>
 
         {/* Controles do Topo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Status de Sincronização */}
+          {/* Status de Sincronização em Tempo Real */}
           <div
-            title={syncStatus.online ? 'Sincronizado online em tempo real' : 'Modo offline / local'}
+            title={syncStatus.online ? 'Sincronizado ao vivo entre os celulares' : 'Conectando à nuvem...'}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              fontSize: '0.72rem',
-              color: syncStatus.online ? 'var(--accent-primary)' : 'var(--text-muted)',
+              gap: '5px',
+              fontSize: '0.74rem',
+              fontWeight: '700',
+              padding: '4px 8px',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: syncStatus.online ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              color: syncStatus.online ? 'var(--accent-primary)' : 'var(--accent-warm)',
               cursor: 'pointer'
             }}
             onClick={onOpenSettings}
           >
-            {syncStatus.online ? <Wifi size={14} /> : <WifiOff size={14} />}
-            <span>{syncStatus.online ? 'Nuvem' : 'Local'}</span>
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: syncStatus.online ? '#10b981' : '#f59e0b',
+                display: 'inline-block'
+              }}
+            />
+            <span>{syncStatus.online ? 'Ao Vivo' : 'Reconectando'}</span>
           </div>
 
           {/* Alternar Tema */}
@@ -73,7 +85,7 @@ export function Header({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem' }}>
-          <span style={{ color: 'var(--text-muted)' }}>Você está usando como:</span>
+          <span style={{ color: 'var(--text-muted)' }}>Você:</span>
           <span style={{ fontWeight: '700', color: activeUser.color, display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span>{activeUser.avatar}</span>
             <span>{activeUser.name}</span>

@@ -516,6 +516,7 @@ export default function App() {
             activeUser={activeUser}
             availability={appData.availability}
             onSaveAvailability={handleSaveAvailability}
+            onRegenerateSchedule={handleRegenerateWeek}
           />
         )}
 

@@ -325,13 +325,34 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Horário Sugerido</label>
+                  <label className="form-label">Horário Personalizado</label>
                   <input
                     type="time"
                     className="form-input"
                     value={formData.preferredTime}
                     onChange={(e) => setFormData({ ...formData, preferredTime: e.target.value })}
                   />
+                  {/* Atalhos rápidos de horário */}
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
+                    {['08:00', '12:00', '14:30', '19:00', '21:30'].map((timeStr) => (
+                      <button
+                        key={timeStr}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, preferredTime: timeStr })}
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '3px 6px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: formData.preferredTime === timeStr ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+                          backgroundColor: formData.preferredTime === timeStr ? 'var(--accent-primary-light)' : 'var(--bg-app)',
+                          color: formData.preferredTime === timeStr ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {timeStr}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

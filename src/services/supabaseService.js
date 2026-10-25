@@ -135,6 +135,27 @@ export async function fetchFeedbacksSupabase(coupleCode) {
 }
 
 /**
+ * Deleta uma reclamação/desabafo no Supabase
+ */
+export async function deleteFeedbackSupabase(feedbackId) {
+  const client = getSupabase();
+  if (!client) return { success: false, reason: 'no_client' };
+
+  try {
+    const { error } = await client
+      .from('feedbacks')
+      .delete()
+      .eq('id', feedbackId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.warn('Erro ao deletar feedback no Supabase:', err);
+    return { success: false, error: err };
+  }
+}
+
+/**
  * Escuta reclamações em tempo real no Supabase
  */
 export function subscribeToSupabaseFeedbacks(coupleCode, onFeedbackChanged) {
@@ -153,6 +174,14 @@ export function subscribeToSupabaseFeedbacks(coupleCode, onFeedbackChanged) {
           filter: `couple_code=eq.${coupleCode || 'CASAL-PAZ'}`
         },
         (payload) => {
+          if (payload && payload.eventType === 'DELETE') {
+            const oldId = payload.old ? payload.old.id : null;
+            if (oldId) {
+              onFeedbackChanged({ eventType: 'DELETE', feedbackId: oldId });
+            }
+            return;
+          }
+
           if (payload && payload.new) {
             const row = payload.new;
             const mapped = {
@@ -183,3 +212,4 @@ export function subscribeToSupabaseFeedbacks(coupleCode, onFeedbackChanged) {
     return () => {};
   }
 }
+

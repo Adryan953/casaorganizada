@@ -14,13 +14,16 @@ import {
   Maximize2
 } from 'lucide-react';
 import { playChimeSound } from '../services/notificationService';
+import { isUserInWorkHours } from '../services/schedulerService';
 
 export function FeedbackScreen({
   activeUser,
   users = [],
   feedbacks = [],
+  availability = {},
   onCreateFeedback,
   onResolveFeedback,
+  onCancelFeedback,
   onTestAlarm
 }) {
   const [activeTab, setActiveTab] = useState('received'); // 'received' | 'sent' | 'new'
@@ -28,10 +31,12 @@ export function FeedbackScreen({
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState('gentle'); // 'gentle' | 'warning' | 'urgent'
   const [imageBase64, setImageBase64] = useState(null);
+  const [notifyAfterWork, setNotifyAfterWork] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedImage, setExpandedImage] = useState(null);
 
   const otherUser = users.find((u) => u.id !== activeUser.id) || users[1];
+  const isPartnerWorkingNow = isUserInWorkHours(availability, otherUser?.id);
 
   // Reclamações que eu recebi do meu parceiro
   const receivedFeedbacks = feedbacks.filter((f) => f.toUserId === activeUser.id);
@@ -81,6 +86,8 @@ export function FeedbackScreen({
 
     setIsSubmitting(true);
 
+    const shouldWaitAfterWork = notifyAfterWork && isPartnerWorkingNow;
+
     const newFeedback = {
       id: `feedback_${Date.now()}`,
       fromUserId: activeUser.id,
@@ -90,6 +97,8 @@ export function FeedbackScreen({
       image: imageBase64,
       severity,
       status: 'pending', // 'pending' | 'resolving' | 'resolved'
+      notifyAfterWork: Boolean(notifyAfterWork),
+      delivered: !shouldWaitAfterWork,
       createdAt: new Date().toISOString(),
       responseNote: null,
       resolvedAt: null
@@ -101,10 +110,15 @@ export function FeedbackScreen({
     setDescription('');
     setImageBase64(null);
     setSeverity('gentle');
+    setNotifyAfterWork(false);
     setIsSubmitting(false);
     setActiveTab('sent');
 
-    alert(`Reclamação enviada com sucesso para ${otherUser.name}! Vai chegar no celular dela agora. 🕊️`);
+    if (shouldWaitAfterWork) {
+      alert(`Desabafo guardado com carinho! Como ${otherUser.name} está trabalhando agora, a notificação e o alarme sonoro serão disparados assim que o expediente terminar para não atrapalhar o foco dela. 🕊️`);
+    } else {
+      alert(`Reclamação enviada com sucesso para ${otherUser.name}! Vai chegar no celular dela agora. 🕊️`);
+    }
   };
 
   const handleQuickResponse = (feedback, responseText, markResolved = false) => {
@@ -345,6 +359,61 @@ export function FeedbackScreen({
               )}
             </div>
 
+            {/* Opção de Notificar Somente Fora do Horário de Trabalho */}
+            <div
+              style={{
+                marginTop: '14px',
+                padding: '12px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Clock size={18} color="var(--accent-primary)" />
+                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+                    Notificar só quando {otherUser.name} sair do trabalho
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={notifyAfterWork}
+                  onChange={(e) => setNotifyAfterWork(e.target.checked)}
+                  style={{ width: '18px', height: '18px', accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
+                />
+              </label>
+
+              <div
+                style={{
+                  fontSize: '0.74rem',
+                  color: isPartnerWorkingNow ? '#f59e0b' : 'var(--text-muted)',
+                  lineHeight: '1.4'
+                }}
+              >
+                {isPartnerWorkingNow ? (
+                  <span>
+                    🟡 <strong>{otherUser.name} está em horário de trabalho agora.</strong> Se marcado, o aviso e o alarme sonoro só serão disparados no celular dela assim que o expediente terminar!
+                  </span>
+                ) : (
+                  <span>
+                    🟢 <strong>{otherUser.name} está fora do horário de trabalho no momento.</strong> O aviso chegará de imediato.
+                  </span>
+                )}
+              </div>
+            </div>
+
             <div style={{ marginTop: '18px' }}>
               <button
                 type="submit"
@@ -353,7 +422,7 @@ export function FeedbackScreen({
                 disabled={isSubmitting}
               >
                 <Send size={18} />
-                <span>{isSubmitting ? 'Enviando ao celular dela...' : `Enviar Reclamação para ${otherUser.name}`}</span>
+                <span>{isSubmitting ? 'Enviando ao celular...' : `Enviar Reclamação para ${otherUser.name}`}</span>
               </button>
             </div>
           </form>
@@ -566,6 +635,26 @@ export function FeedbackScreen({
                   />
                 )}
 
+                {item.notifyAfterWork && !item.delivered && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      padding: '6px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      fontSize: '0.74rem',
+                      color: '#d97706',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Clock size={14} />
+                    <span>Aguardando {otherUser.name} sair do trabalho para disparar a notificação.</span>
+                  </div>
+                )}
+
                 {item.responseNote && (
                   <div
                     style={{
@@ -581,6 +670,36 @@ export function FeedbackScreen({
                     <strong>Resposta de {otherUser.name}:</strong> "{item.responseNote}"
                   </div>
                 )}
+
+                {/* Opção de Cancelar Desabafo */}
+                <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Deseja cancelar este desabafo sobre "${item.title}"? Ele será removido e o alarme no celular de ${otherUser.name} será desligado imediatamente.`)) {
+                        if (onCancelFeedback) {
+                          onCancelFeedback(item.id);
+                        }
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                      color: '#ef4444',
+                      fontSize: '0.74rem',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    <span>Cancelar Desabafo</span>
+                  </button>
+                </div>
               </div>
             ))
           )}

@@ -18,7 +18,7 @@ import {
   setActiveUserId,
   getDefaultAppState
 } from './services/storageService';
-import { generateWeeklySchedule, formatDateKey } from './services/schedulerService';
+import { generateWeeklySchedule, formatDateKey, isUserInWorkHours } from './services/schedulerService';
 import {
   triggerNotification,
   playChimeSound,
@@ -29,6 +29,7 @@ import { getCurrentAuthUser, logout } from './services/authService';
 import {
   insertFeedbackSupabase,
   updateFeedbackSupabase,
+  deleteFeedbackSupabase,
   initSupabase,
   fetchFeedbacksSupabase,
   subscribeToSupabaseFeedbacks
@@ -67,7 +68,22 @@ export default function App() {
         });
 
       // Escuta novos feedbacks em tempo real via Supabase Realtime
-      const unsubFeedbacks = subscribeToSupabaseFeedbacks(appData.coupleCode, ({ eventType, feedback }) => {
+      const unsubFeedbacks = subscribeToSupabaseFeedbacks(appData.coupleCode, ({ eventType, feedback, feedbackId }) => {
+        if (eventType === 'DELETE' && feedbackId) {
+          setAppData((prev) => ({
+            ...prev,
+            feedbacks: (prev.feedbacks || []).filter((f) => f.id !== feedbackId)
+          }));
+          setActiveAttentionAlarm((currentAlarm) => {
+            if (currentAlarm?.id === feedbackId) {
+              stopAttentionAlarmLoop();
+              return null;
+            }
+            return currentAlarm;
+          });
+          return;
+        }
+
         if (!feedback) return;
         setAppData((prev) => {
           let updatedList = [...(prev.feedbacks || [])];
@@ -75,16 +91,23 @@ export default function App() {
             if (!updatedList.some((f) => f.id === feedback.id)) {
               updatedList = [feedback, ...updatedList];
               const myId = currentUser?.id || getActiveUserId();
-              // Se foi o parceiro que enviou e é tom de Atenção ou Urgente: toca alarme que só para no clique!
-              if ((feedback.severity === 'warning' || feedback.severity === 'urgent') && feedback.fromUserId !== myId) {
-                const partner = (prev.users || []).find((u) => u.id === feedback.fromUserId);
-                startAttentionAlarmLoop();
-                setActiveAttentionAlarm({
-                  ...feedback,
-                  fromUserName: partner?.name || 'Seu Parceiro'
-                });
-              } else {
-                try { playChimeSound(); } catch (e) {}
+              
+              // Se estiver agendado para quando sair do trabalho e a pessoa ainda está trabalhando, não dispara alarme agora
+              const isWorking = isUserInWorkHours(prev.availability, myId);
+              const shouldHoldForAfterWork = feedback.notifyAfterWork && !feedback.delivered && isWorking;
+
+              if (!shouldHoldForAfterWork) {
+                // Se foi o parceiro que enviou e é tom de Atenção ou Urgente: toca alarme que só para no clique!
+                if ((feedback.severity === 'warning' || feedback.severity === 'urgent') && feedback.fromUserId !== myId) {
+                  const partner = (prev.users || []).find((u) => u.id === feedback.fromUserId);
+                  startAttentionAlarmLoop();
+                  setActiveAttentionAlarm({
+                    ...feedback,
+                    fromUserName: partner?.name || 'Seu Parceiro'
+                  });
+                } else if (feedback.fromUserId !== myId) {
+                  try { playChimeSound(); } catch (e) {}
+                }
               }
             }
           } else if (eventType === 'UPDATE') {
@@ -121,10 +144,27 @@ export default function App() {
         setSyncStatus(status);
       },
       (actionPayload) => {
-        if (actionPayload && actionPayload.type === 'FEEDBACK_CREATE' && actionPayload.feedback) {
+        if (!actionPayload) return;
+        const myId = currentUser?.id || getActiveUserId();
+
+        // Parceiro cancelou o desabafo: interrompe o alarme imediatamente se estiver tocando
+        if (actionPayload.type === 'FEEDBACK_CANCEL' && actionPayload.feedbackId) {
+          setActiveAttentionAlarm((currentAlarm) => {
+            if (currentAlarm?.id === actionPayload.feedbackId) {
+              stopAttentionAlarmLoop();
+              return null;
+            }
+            return currentAlarm;
+          });
+          return;
+        }
+
+        if (actionPayload.type === 'FEEDBACK_CREATE' && actionPayload.feedback) {
           const fb = actionPayload.feedback;
-          const myId = currentUser?.id || getActiveUserId();
-          if ((fb.severity === 'warning' || fb.severity === 'urgent') && fb.fromUserId !== myId) {
+          const isWorking = isUserInWorkHours(appData.availability, myId);
+          const shouldHoldForAfterWork = fb.notifyAfterWork && !fb.delivered && isWorking;
+
+          if (!shouldHoldForAfterWork && (fb.severity === 'warning' || fb.severity === 'urgent') && fb.fromUserId !== myId) {
             const partner = (appData.users || []).find((u) => u.id === fb.fromUserId);
             startAttentionAlarmLoop();
             setActiveAttentionAlarm({
@@ -139,7 +179,7 @@ export default function App() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [appData.coupleCode, currentUser]);
+  }, [appData.coupleCode, appData.availability, currentUser]);
 
   // Se o usuário logou, garante que o activeUserId é o dele
   useEffect(() => {
@@ -171,11 +211,49 @@ export default function App() {
           body: `Tempo estimado: ${task.durationMinutes} min. No seu ritmo e com calma!`
         });
       });
+
+      // Checa desabafos agendados para quando o parceiro sair do trabalho
+      const isWorkingNow = isUserInWorkHours(appData.availability, currentUser.id);
+      if (!isWorkingNow) {
+        const pendingAfterWorkFeedbacks = (appData.feedbacks || []).filter(
+          (f) => f.toUserId === currentUser.id && f.notifyAfterWork && !f.delivered
+        );
+
+        if (pendingAfterWorkFeedbacks.length > 0) {
+          const updatedFeedbacks = (appData.feedbacks || []).map((f) => {
+            if (f.toUserId === currentUser.id && f.notifyAfterWork && !f.delivered) {
+              return { ...f, delivered: true };
+            }
+            return f;
+          });
+
+          setAppData((prev) => ({ ...prev, feedbacks: updatedFeedbacks }));
+
+          pendingAfterWorkFeedbacks.forEach((fb) => {
+            const partner = (appData.users || []).find((u) => u.id === fb.fromUserId);
+            const partnerName = partner?.name || 'Seu Parceiro';
+
+            triggerNotification(`Recado de ${partnerName}: ${fb.title} 🕊️`, {
+              body: fb.description || 'Abra o app para conversar com tranquilidade.'
+            });
+
+            if (fb.severity === 'warning' || fb.severity === 'urgent') {
+              startAttentionAlarmLoop();
+              setActiveAttentionAlarm({
+                ...fb,
+                fromUserName: partnerName
+              });
+            } else {
+              try { playChimeSound(); } catch (e) {}
+            }
+          });
+        }
+      }
     };
 
     const interval = setInterval(checkReminders, 60000);
     return () => clearInterval(interval);
-  }, [appData.weeklySchedule, currentUser]);
+  }, [appData.weeklySchedule, appData.feedbacks, appData.availability, currentUser]);
 
   const activeUser =
     (appData.users || []).find((u) => u.id === (currentUser?.id || getActiveUserId())) || appData.users[0];
@@ -379,6 +457,30 @@ export default function App() {
     updateFeedbackSupabase(feedbackId, updates);
   };
 
+  // Cancelar e Excluir Reclamação / Desabafo
+  const handleCancelFeedback = (feedbackId) => {
+    const updatedFeedbacks = (appData.feedbacks || []).filter((f) => f.id !== feedbackId);
+    const updatedData = { ...appData, feedbacks: updatedFeedbacks };
+    setAppData(updatedData);
+
+    syncSaveData(updatedData, {
+      type: 'FEEDBACK_CANCEL',
+      feedbackId
+    });
+
+    deleteFeedbackSupabase(feedbackId);
+
+    setActiveAttentionAlarm((currentAlarm) => {
+      if (currentAlarm?.id === feedbackId) {
+        stopAttentionAlarmLoop();
+        return null;
+      }
+      return currentAlarm;
+    });
+
+    alert('Desabafo cancelado e excluído com sucesso!');
+  };
+
   // Salvar Tarefa (Criar ou Editar)
   const handleSaveTask = (task) => {
     const exists = (appData.tasks || []).some((t) => t.id === task.id);
@@ -564,8 +666,10 @@ export default function App() {
             activeUser={activeUser}
             users={appData.users}
             feedbacks={appData.feedbacks || []}
+            availability={appData.availability}
             onCreateFeedback={handleCreateFeedback}
             onResolveFeedback={handleResolveFeedback}
+            onCancelFeedback={handleCancelFeedback}
             onTestAlarm={handleTestAttentionAlarm}
           />
         )}

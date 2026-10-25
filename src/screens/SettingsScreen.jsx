@@ -11,7 +11,10 @@ import {
   RotateCcw,
   Sliders,
   LogOut,
-  Sparkles
+  Sparkles,
+  Download,
+  RefreshCw,
+  Smartphone
 } from 'lucide-react';
 import { sendTestNotification } from '../services/notificationService';
 
@@ -37,6 +40,26 @@ export function SettingsScreen({
     user2: users[1]?.name || 'Kah'
   });
   const [ratioVal, setRatioVal] = useState(targetRatio.user1 || 50);
+
+  const APK_DOWNLOAD_URL = 'https://github.com/Adryan953/casaorganizada/raw/main/CasaEmPaz.apk';
+
+  // Baixar a versão mais recente do aplicativo no próprio celular
+  const handleDownloadApk = () => {
+    window.open(APK_DOWNLOAD_URL, '_system') || window.open(APK_DOWNLOAD_URL, '_blank');
+  };
+
+  // Recarregar os arquivos e limpar caches
+  const handleReloadApp = async () => {
+    if ('serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (let reg of registrations) {
+          await reg.unregister();
+        }
+      } catch (e) {}
+    }
+    window.location.reload(true);
+  };
 
   // Copiar código do casal
   const handleCopyCode = () => {
@@ -84,6 +107,72 @@ export function SettingsScreen({
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
           Ajustes de perfil, divisão e preferências da casa.
         </p>
+      </div>
+
+      {/* BLOCO 0: Atualização do Aplicativo */}
+      <div className="card" style={{ borderColor: 'var(--accent-primary)', background: 'linear-gradient(to bottom, var(--bg-card), var(--bg-app))', marginBottom: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Smartphone size={20} color="var(--accent-primary)" />
+            <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Atualizações do Aplicativo</h3>
+          </div>
+          <span
+            style={{
+              fontSize: '0.72rem',
+              fontWeight: '700',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              color: 'var(--accent-primary)'
+            }}
+          >
+            v1.5.0 Oficial
+          </span>
+        </div>
+
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: '1.4' }}>
+          Atualize para a versão mais recente diretamente pelo celular sem precisar do computador.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{
+              padding: '12px 16px',
+              fontSize: '0.9rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
+            onClick={handleDownloadApk}
+          >
+            <Download size={18} />
+            <span>📥 Baixar Atualização do App (APK)</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{
+              padding: '10px 14px',
+              fontSize: '0.82rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+            onClick={handleReloadApp}
+          >
+            <RefreshCw size={15} />
+            <span>🔄 Recarregar e Sincronizar Agora</span>
+          </button>
+        </div>
+
+        <div style={{ marginTop: '10px', fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+          💡 Ao baixar o APK, toque em "Instalar" para atualizar. Seus dados e login continuam salvos!
+        </div>
       </div>
 
       {/* BLOCO 1: Conexão do Casal */}

@@ -279,3 +279,42 @@ export function calculateBalanceMetrics(schedule = [], users = []) {
     friendlyMessage
   };
 }
+
+/**
+ * Verifica se um usuário está em horário de trabalho agora
+ * Considera: folgas cadastradas, horários livres customizados e horário comercial padrão
+ */
+export function isUserInWorkHours(availability = {}, userId) {
+  const now = new Date();
+  const dayIndex = now.getDay(); // 0 = Dom, 1 = Seg ... 6 = Sab
+  const isWeekend = dayIndex === 0 || dayIndex === 6;
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const userDay = availability?.[userId]?.[dayIndex];
+
+  if (userDay) {
+    if (userDay.type === 'off') {
+      return false;
+    }
+
+    if (userDay.startTime && userDay.endTime) {
+      const [sh, sm] = userDay.startTime.split(':').map(Number);
+      const [eh, em] = userDay.endTime.split(':').map(Number);
+      const startMin = sh * 60 + (sm || 0);
+      const endMin = eh * 60 + (em || 0);
+
+      if (currentMinutes >= startMin && currentMinutes <= endMin) {
+        return false;
+      }
+    }
+  }
+
+  if (isWeekend) {
+    return false;
+  }
+
+  const workStart = 8 * 60 + 30; // 08:30
+  const workEnd = 18 * 60;       // 18:00
+
+  return currentMinutes >= workStart && currentMinutes < workEnd;
+}

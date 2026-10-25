@@ -263,6 +263,8 @@ export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange
           }
           return f;
         });
+      } else if (payload.type === 'FEEDBACK_CANCEL') {
+        updated.feedbacks = (current.feedbacks || []).filter((f) => f.id !== payload.feedbackId);
       } else if (payload.type === 'FULL_STATE_UPDATE') {
         // Atualização completa recebida
         if (payload.data && payload.data.updatedAt) {

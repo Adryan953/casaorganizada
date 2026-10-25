@@ -171,7 +171,7 @@ export async function broadcastSyncEvent(coupleCode, eventPayload) {
  * Motor de Sincronização em Tempo Real (WebSocket + SSE + Polling de segurança)
  * Escuta o canal do casal e atualiza a tela do parceiro automaticamente no mesmo instante!
  */
-export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange) {
+export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange, onActionReceived) {
   let isClosed = false;
   let ws = null;
   let pollInterval = null;
@@ -288,6 +288,10 @@ export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange
 
       if (onSyncStatusChange) {
         onSyncStatusChange({ online: true, reason: 'synced_event', lastEvent: payload.type });
+      }
+
+      if (onActionReceived) {
+        onActionReceived(payload);
       }
     } catch (e) {
       console.warn('Erro ao processar mensagem do parceiro:', e);

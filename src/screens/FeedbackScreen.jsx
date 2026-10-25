@@ -20,7 +20,8 @@ export function FeedbackScreen({
   users = [],
   feedbacks = [],
   onCreateFeedback,
-  onResolveFeedback
+  onResolveFeedback,
+  onTestAlarm
 }) {
   const [activeTab, setActiveTab] = useState('received'); // 'received' | 'sent' | 'new'
   const [title, setTitle] = useState('');
@@ -235,6 +236,49 @@ export function FeedbackScreen({
                   </button>
                 ))}
               </div>
+
+              {/* Explicação do Alarme de Atenção Contínuo */}
+              {(severity === 'warning' || severity === 'urgent') && (
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    fontSize: '0.75rem',
+                    color: '#ef4444',
+                    lineHeight: '1.4'
+                  }}
+                >
+                  🚨 <strong>Modo Atenção Ativo:</strong> Abrirá cobrindo a tela do celular de {otherUser.name} com som de alarme contínuo que só desliga quando tocar em <strong>Parar</strong>!
+                </div>
+              )}
+
+              {onTestAlarm && (
+                <button
+                  type="button"
+                  onClick={onTestAlarm}
+                  style={{
+                    marginTop: '8px',
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px dashed var(--accent-rose)',
+                    backgroundColor: 'transparent',
+                    color: 'var(--accent-rose)',
+                    fontSize: '0.76rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>🔊 Testar Som e Tela de Atenção Agora</span>
+                </button>
+              )}
             </div>
 
             {/* UPLOAD / TIRAR FOTO */}

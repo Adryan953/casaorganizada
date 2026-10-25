@@ -1,4 +1,87 @@
-// Serviço de Notificações e Lembretes Suaves — "Casa em Paz"
+// Controle do Loop de Alarme Contínuo
+let alarmIntervalId = null;
+let alarmAudioCtx = null;
+
+/**
+ * Inicia o som de alarme contínuo de Atenção/Urgência
+ * Esse som continua tocando em loop até que stopAttentionAlarmLoop() seja chamado!
+ */
+export function startAttentionAlarmLoop() {
+  if (alarmIntervalId) return; // Já está tocando
+
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+      alarmAudioCtx = new AudioContext();
+    }
+  } catch (e) {
+    console.warn('AudioContext do alarme:', e);
+  }
+
+  const playPulse = () => {
+    try {
+      if (alarmAudioCtx && alarmAudioCtx.state === 'suspended') {
+        alarmAudioCtx.resume();
+      }
+
+      if (alarmAudioCtx) {
+        const now = alarmAudioCtx.currentTime;
+        const beeps = [
+          { freq: 880, start: 0, dur: 0.18, type: 'triangle' },
+          { freq: 659.25, start: 0.22, dur: 0.25, type: 'sawtooth' }
+        ];
+
+        beeps.forEach(({ freq, start, dur, type }) => {
+          const osc = alarmAudioCtx.createOscillator();
+          const gain = alarmAudioCtx.createGain();
+
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, now + start);
+
+          gain.gain.setValueAtTime(0.01, now + start);
+          gain.gain.linearRampToValueAtTime(0.35, now + start + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+
+          osc.connect(gain);
+          gain.connect(alarmAudioCtx.destination);
+
+          osc.start(now + start);
+          osc.stop(now + start + dur);
+        });
+      }
+
+      if ('vibrate' in navigator) {
+        navigator.vibrate([300, 150, 300]);
+      }
+    } catch (err) {
+      console.warn('Erro ao emitir pulso do alarme:', err);
+    }
+  };
+
+  playPulse();
+  alarmIntervalId = setInterval(playPulse, 750);
+}
+
+/**
+ * Para imediatamente o som do alarme e a vibração
+ */
+export function stopAttentionAlarmLoop() {
+  if (alarmIntervalId) {
+    clearInterval(alarmIntervalId);
+    alarmIntervalId = null;
+  }
+
+  if (alarmAudioCtx) {
+    try {
+      alarmAudioCtx.close();
+    } catch (e) {}
+    alarmAudioCtx = null;
+  }
+
+  if ('vibrate' in navigator) {
+    navigator.vibrate(0);
+  }
+}
 
 /**
  * Toca um som suave de sino/chime usando Web Audio API nativa

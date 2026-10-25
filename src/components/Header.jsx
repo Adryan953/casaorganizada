@@ -114,14 +114,10 @@ export function Header({
         </div>
 
         {otherUser && (
-          <button
-            className="active-user-pill"
-            onClick={() => onSwitchUser(otherUser.id)}
-            title={`Mudar para o perfil de ${otherUser.name}`}
-          >
-            <span style={{ fontSize: '0.85rem' }}>{otherUser.avatar}</span>
-            <span>Usar como {otherUser.name}</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Com:</span>
+            <span style={{ fontWeight: '600' }}>{otherUser.avatar} {otherUser.name}</span>
+          </div>
         )}
       </div>
     </header>

@@ -19,7 +19,12 @@ import {
   getDefaultAppState
 } from './services/storageService';
 import { generateWeeklySchedule, formatDateKey } from './services/schedulerService';
-import { triggerNotification, playChimeSound } from './services/notificationService';
+import {
+  triggerNotification,
+  playChimeSound,
+  startAttentionAlarmLoop,
+  stopAttentionAlarmLoop
+} from './services/notificationService';
 import { getCurrentAuthUser, logout } from './services/authService';
 import {
   insertFeedbackSupabase,
@@ -28,6 +33,7 @@ import {
   fetchFeedbacksSupabase,
   subscribeToSupabaseFeedbacks
 } from './services/supabaseService';
+import { AttentionAlarmModal } from './components/AttentionAlarmModal';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => getCurrentAuthUser());
@@ -37,6 +43,7 @@ export default function App() {
     return localStorage.getItem('casa_em_paz_theme') || 'light';
   });
   const [syncStatus, setSyncStatus] = useState({ online: true, reason: 'connecting', mode: 'realtime' });
+  const [activeAttentionAlarm, setActiveAttentionAlarm] = useState(null);
 
   // Inicializa Supabase e sincroniza feedbacks do banco de forma segura
   useEffect(() => {
@@ -67,7 +74,18 @@ export default function App() {
           if (eventType === 'INSERT') {
             if (!updatedList.some((f) => f.id === feedback.id)) {
               updatedList = [feedback, ...updatedList];
-              try { playChimeSound(); } catch (e) {}
+              const myId = currentUser?.id || getActiveUserId();
+              // Se foi o parceiro que enviou e é tom de Atenção ou Urgente: toca alarme que só para no clique!
+              if ((feedback.severity === 'warning' || feedback.severity === 'urgent') && feedback.fromUserId !== myId) {
+                const partner = (prev.users || []).find((u) => u.id === feedback.fromUserId);
+                startAttentionAlarmLoop();
+                setActiveAttentionAlarm({
+                  ...feedback,
+                  fromUserName: partner?.name || 'Seu Parceiro'
+                });
+              } else {
+                try { playChimeSound(); } catch (e) {}
+              }
             }
           } else if (eventType === 'UPDATE') {
             updatedList = updatedList.map((f) => (f.id === feedback.id ? { ...f, ...feedback } : f));
@@ -82,7 +100,7 @@ export default function App() {
     } catch (err) {
       console.warn('Erro ao inicializar servicos de nuvem:', err);
     }
-  }, [appData.coupleCode]);
+  }, [appData.coupleCode, currentUser]);
 
   // Aplica o tema visual no elemento HTML
   useEffect(() => {
@@ -101,13 +119,27 @@ export default function App() {
       },
       (status) => {
         setSyncStatus(status);
+      },
+      (actionPayload) => {
+        if (actionPayload && actionPayload.type === 'FEEDBACK_CREATE' && actionPayload.feedback) {
+          const fb = actionPayload.feedback;
+          const myId = currentUser?.id || getActiveUserId();
+          if ((fb.severity === 'warning' || fb.severity === 'urgent') && fb.fromUserId !== myId) {
+            const partner = (appData.users || []).find((u) => u.id === fb.fromUserId);
+            startAttentionAlarmLoop();
+            setActiveAttentionAlarm({
+              ...fb,
+              fromUserName: partner?.name || 'Seu Parceiro'
+            });
+          }
+        }
       }
     );
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [appData.coupleCode]);
+  }, [appData.coupleCode, currentUser]);
 
   // Se o usuário logou, garante que o activeUserId é o dele
   useEffect(() => {
@@ -437,6 +469,25 @@ export default function App() {
     alert('Tarefas e rotina restauradas com sucesso para o padrão da casa! 🌿');
   };
 
+  // Parar Alarme de Atenção Contínuo
+  const handleStopAttentionAlarm = () => {
+    stopAttentionAlarmLoop();
+    setActiveAttentionAlarm(null);
+  };
+
+  // Testar Alarme de Atenção
+  const handleTestAttentionAlarm = () => {
+    startAttentionAlarmLoop();
+    const other = (appData.users || []).find((u) => u.id !== activeUser.id);
+    setActiveAttentionAlarm({
+      title: '🚨 Teste de Alerta de Atenção da Casa',
+      description: 'O som contínuo e a tela cheia estão ativos! O som só irá parar quando você clicar no botão abaixo.',
+      fromUserName: other?.name || 'Seu Parceiro',
+      severity: 'warning',
+      createdAt: new Date().toISOString()
+    });
+  };
+
   // Se não estiver logado, exibe tela de login elegante
   if (!currentUser) {
     return <LoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
@@ -515,6 +566,7 @@ export default function App() {
             feedbacks={appData.feedbacks || []}
             onCreateFeedback={handleCreateFeedback}
             onResolveFeedback={handleResolveFeedback}
+            onTestAlarm={handleTestAttentionAlarm}
           />
         )}
 
@@ -554,6 +606,7 @@ export default function App() {
             onResetToDefaults={handleResetToDefaults}
             syncStatus={syncStatus}
             onLogout={handleLogout}
+            onTestAlarm={handleTestAttentionAlarm}
           />
         )}
       </main>
@@ -564,6 +617,12 @@ export default function App() {
         onChangeScreen={setActiveScreen}
         pendingSwapsCount={pendingSwapsCount}
         unreadFeedbacksCount={unreadFeedbacksCount}
+      />
+
+      {/* Alarme de Atenção / Urgência em Tela Cheia com Som Contínuo */}
+      <AttentionAlarmModal
+        alarmData={activeAttentionAlarm}
+        onStop={handleStopAttentionAlarm}
       />
     </div>
   );

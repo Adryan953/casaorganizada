@@ -126,36 +126,16 @@ export function LoginScreen({ onLoginSuccess }) {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary btn-action-large" style={{ marginBottom: '16px' }}>
-            <span>Entrar no Lar</span>
+          <button
+            type="submit"
+            className="btn btn-primary btn-action-large"
+            disabled={loading}
+            style={{ marginBottom: '8px' }}
+          >
+            <span>{loading ? 'Entrando...' : 'Entrar no Lar'}</span>
             <ArrowRight size={18} />
           </button>
         </form>
-
-        {/* Acesso Rápido de 1 Toque */}
-        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px', marginTop: '8px' }}>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-            Ou entre com 1 toque neste celular:
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ padding: '10px 8px', fontSize: '0.85rem' }}
-              onClick={() => handleQuickLogin('Adryan', 'Adryan123')}
-            >
-              <span>🧔‍♂️ Entrar Adryan</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ padding: '10px 8px', fontSize: '0.85rem' }}
-              onClick={() => handleQuickLogin('Kah', 'Kah123')}
-            >
-              <span>👩‍🦰 Entrar Kah</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

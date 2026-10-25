@@ -27,7 +27,8 @@ export function SettingsScreen({
   onUpdateTargetRatio,
   onResetToDefaults,
   syncStatus = { online: true },
-  onLogout
+  onLogout,
+  onTestAlarm
 }) {
   const [copied, setCopied] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -209,14 +210,32 @@ export function SettingsScreen({
           Avisa no horário de cada tarefa e quando o parceiro envia um recado ou reclamação.
         </p>
 
-        <button
-          className="btn btn-secondary"
-          style={{ width: '100%', padding: '10px', fontSize: '0.85rem' }}
-          onClick={() => sendTestNotification(activeUser.name)}
-        >
-          <Bell size={16} />
-          <span>Testar Lembrete Suave Agora</span>
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button
+            className="btn btn-secondary"
+            style={{ width: '100%', padding: '10px', fontSize: '0.85rem' }}
+            onClick={() => sendTestNotification(activeUser.name)}
+          >
+            <Bell size={16} />
+            <span>Testar Lembrete Suave</span>
+          </button>
+
+          {onTestAlarm && (
+            <button
+              className="btn btn-secondary"
+              style={{
+                width: '100%',
+                padding: '10px',
+                fontSize: '0.85rem',
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+                color: '#ef4444'
+              }}
+              onClick={onTestAlarm}
+            >
+              <span>🚨 Testar Alarme de Atenção (Tela Cheia)</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* BLOCO 5: Tema, Restauração e Logout */}

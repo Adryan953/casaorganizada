@@ -50,9 +50,14 @@ class ErrorBoundary extends Component {
           <h2 style={{ fontSize: '1.3rem', fontWeight: '800', marginBottom: '8px' }}>
             Casa em Paz 🌿
           </h2>
-          <p style={{ fontSize: '0.88rem', color: '#94a3b8', marginBottom: '16px', maxWidth: '300px' }}>
+          <p style={{ fontSize: '0.88rem', color: '#94a3b8', marginBottom: '12px', maxWidth: '300px' }}>
             Tivemos um pequeno imprevisto ao carregar o aplicativo. Toque abaixo para recarregar com segurança.
           </p>
+          {this.state.error && (
+            <pre style={{ fontSize: '0.68rem', color: '#f87171', backgroundColor: '#1e293b', padding: '8px 12px', borderRadius: '8px', maxWidth: '320px', overflowX: 'auto', textAlign: 'left', marginBottom: '14px', whiteSpace: 'pre-wrap' }}>
+              {this.state.error?.message || String(this.state.error)}
+            </pre>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '280px' }}>
             <button
               onClick={() => window.location.reload()}

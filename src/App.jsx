@@ -12,6 +12,7 @@ import { FeedbackScreen } from './screens/FeedbackScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import {
   loadLocalData,
+  saveLocalData,
   subscribeToCouple,
   syncSaveData,
   getActiveUserId,
@@ -60,14 +61,20 @@ export default function App() {
         .then((cloudState) => {
           if (cloudState && cloudState.tasks && cloudState.tasks.length > 0) {
             setAppData((prev) => {
-              const localTime = new Date(prev.updatedAt || 0).getTime();
-              const cloudTime = new Date(cloudState.updatedAt || 0).getTime();
-              if (cloudTime >= localTime) {
-                return { ...prev, ...cloudState };
-              } else {
-                saveCoupleStateSupabase(prev.coupleCode, prev).catch(() => {});
-                return prev;
-              }
+              // As tarefas salvas no banco Supabase na nuvem pelo casal são a verdade oficial
+              const updated = {
+                ...prev,
+                ...cloudState,
+                tasks: cloudState.tasks,
+                weeklySchedule:
+                  cloudState.weeklySchedule && cloudState.weeklySchedule.length > 0
+                    ? cloudState.weeklySchedule
+                    : prev.weeklySchedule,
+                swaps: cloudState.swaps || prev.swaps || [],
+                updatedAt: cloudState.updatedAt || new Date().toISOString()
+              };
+              saveLocalData(updated);
+              return updated;
             });
             setSyncStatus({ online: true, reason: 'connected', mode: 'supabase' });
           } else {
@@ -87,12 +94,16 @@ export default function App() {
         (remoteState) => {
           if (remoteState && remoteState.tasks) {
             setAppData((prev) => {
-              const localTime = new Date(prev.updatedAt || 0).getTime();
-              const remoteTime = new Date(remoteState.updatedAt || 0).getTime();
-              if (remoteTime > localTime) {
-                return { ...prev, ...remoteState };
-              }
-              return prev;
+              const updated = {
+                ...prev,
+                ...remoteState,
+                tasks: remoteState.tasks,
+                weeklySchedule: remoteState.weeklySchedule || prev.weeklySchedule,
+                swaps: remoteState.swaps || prev.swaps || [],
+                updatedAt: remoteState.updatedAt || new Date().toISOString()
+              };
+              saveLocalData(updated);
+              return updated;
             });
             setSyncStatus({ online: true, reason: 'synced_remote', mode: 'supabase' });
           }
@@ -374,6 +385,35 @@ export default function App() {
   const handleLogout = () => {
     logout();
     setCurrentUser(null);
+  };
+
+  // Forçar sincronização imediata com a nuvem do Supabase
+  const handleForceCloudSync = async () => {
+    try {
+      setSyncStatus({ online: true, reason: 'syncing', mode: 'supabase' });
+      const cloudState = await fetchCoupleStateSupabase(appData.coupleCode);
+      if (cloudState && cloudState.tasks && cloudState.tasks.length > 0) {
+        setAppData((prev) => {
+          const updated = {
+            ...prev,
+            ...cloudState,
+            tasks: cloudState.tasks,
+            weeklySchedule: cloudState.weeklySchedule || prev.weeklySchedule,
+            swaps: cloudState.swaps || prev.swaps || [],
+            updatedAt: cloudState.updatedAt || new Date().toISOString()
+          };
+          saveLocalData(updated);
+          return updated;
+        });
+        alert('Sincronizado com a nuvem com sucesso! ✅');
+      } else {
+        await saveCoupleStateSupabase(appData.coupleCode, appData);
+        alert('Tarefas enviadas para a nuvem com sucesso! ✅');
+      }
+      setSyncStatus({ online: true, reason: 'connected', mode: 'supabase' });
+    } catch (e) {
+      alert('Erro ao sincronizar com a nuvem: ' + e.message);
+    }
   };
 
   // Alternar Modo Claro / Escuro
@@ -753,6 +793,7 @@ export default function App() {
         onToggleTheme={handleToggleTheme}
         onOpenSettings={() => setActiveScreen('settings')}
         onLogout={handleLogout}
+        onForceSync={handleForceCloudSync}
       />
 
       {/* Conteúdo Principal com as 8 Telas */}
@@ -847,6 +888,7 @@ export default function App() {
             syncStatus={syncStatus}
             onLogout={handleLogout}
             onTestAlarm={handleTestAttentionAlarm}
+            onForceSync={handleForceCloudSync}
           />
         )}
       </main>

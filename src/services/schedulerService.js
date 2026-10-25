@@ -1,7 +1,7 @@
 // Motor de Divisão Automática e Equilíbrio Semanal — "Casa em Paz"
 // Focado em EVITAR SOBRECARGA, respeitar disponibilidades e promover harmonia no casal.
 
-import { DAYS_OF_WEEK } from '../constants/initialData';
+import { DAYS_OF_WEEK } from '../constants/initialData.js';
 
 /**
  * Calcula a pontuação de esforço de uma tarefa: tempo × desgaste

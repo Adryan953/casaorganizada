@@ -10,7 +10,8 @@ export function Header({
   theme,
   onToggleTheme,
   onOpenSettings,
-  onLogout
+  onLogout,
+  onForceSync
 }) {
   const otherUser = users.find((u) => u.id !== activeUser?.id) || users[1];
 
@@ -43,7 +44,7 @@ export function Header({
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
           {/* Status de Sincronização em Tempo Real */}
           <div
-            title={syncStatus.online ? 'Sincronizado ao vivo entre os celulares' : 'Conectando à nuvem...'}
+            title={syncStatus.online ? 'Sincronizado ao vivo entre os celulares (Toque para sincronizar)' : 'Conectando à nuvem...'}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -57,7 +58,7 @@ export function Header({
               cursor: 'pointer',
               whiteSpace: 'nowrap'
             }}
-            onClick={onOpenSettings}
+            onClick={onForceSync ? onForceSync : onOpenSettings}
           >
             <span
               style={{

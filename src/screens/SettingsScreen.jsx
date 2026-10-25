@@ -32,7 +32,8 @@ export function SettingsScreen({
   onResetToDefaults,
   syncStatus = { online: true },
   onLogout,
-  onTestAlarm
+  onTestAlarm,
+  onForceSync
 }) {
   const [copied, setCopied] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -44,6 +45,7 @@ export function SettingsScreen({
     user1: userAdryan?.name || 'Adryan',
     user2: userKah?.name || 'Kah'
   });
+
   const [ratioVal, setRatioVal] = useState(targetRatio.user1 || 50);
 
   const APK_DOWNLOAD_URL = 'https://github.com/Adryan953/casaorganizada/raw/main/CasaEmPaz.apk';
@@ -53,8 +55,12 @@ export function SettingsScreen({
     window.open(APK_DOWNLOAD_URL, '_system') || window.open(APK_DOWNLOAD_URL, '_blank');
   };
 
-  // Recarregar os arquivos e limpar caches
+  // Recarregar os arquivos e sincronizar com a nuvem Supabase
   const handleReloadApp = async () => {
+    if (onForceSync) {
+      await onForceSync();
+      return;
+    }
     if ('serviceWorker' in navigator) {
       try {
         const registrations = await navigator.serviceWorker.getRegistrations();

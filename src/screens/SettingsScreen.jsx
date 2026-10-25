@@ -11,12 +11,13 @@ import {
   Sun,
   RotateCcw,
   Sliders,
+  LogOut,
   ExternalLink,
   ShieldCheck,
   Heart
 } from 'lucide-react';
 import { sendTestNotification } from '../services/notificationService';
-import { getStoredFirebaseConfig, saveStoredFirebaseConfig } from '../services/storageService';
+import { getStoredSupabaseConfig, saveStoredSupabaseConfig, getSupabase } from '../services/supabaseService';
 
 export function SettingsScreen({
   users = [],
@@ -29,30 +30,24 @@ export function SettingsScreen({
   onUpdateUsers,
   onUpdateTargetRatio,
   onResetToDefaults,
-  syncStatus = { online: false }
+  syncStatus = { online: true },
+  onLogout
 }) {
   const [copied, setCopied] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [names, setNames] = useState({
-    user1: users[0]?.name || 'Eu',
-    user2: users[1]?.name || 'Kassandra'
+    user1: users[0]?.name || 'Adryan',
+    user2: users[1]?.name || 'Kah'
   });
   const [ratioVal, setRatioVal] = useState(targetRatio.user1 || 50);
 
-  // Firebase Config State
-  const [firebaseConfig, setFirebaseConfig] = useState(() => {
-    const saved = getStoredFirebaseConfig();
-    return saved || {
-      apiKey: '',
-      authDomain: '',
-      projectId: '',
-      storageBucket: '',
-      messagingSenderId: '',
-      appId: ''
-    };
+  // Supabase Config State
+  const [supabaseConfig, setSupabaseConfig] = useState(() => {
+    const saved = getStoredSupabaseConfig();
+    return saved || { url: '', anonKey: '' };
   });
-  const [showFirebaseGuide, setShowFirebaseGuide] = useState(false);
-  const [firebaseSaved, setFirebaseSaved] = useState(false);
+  const [supabaseSaved, setSupabaseSaved] = useState(false);
+  const [showSupabaseGuide, setShowSupabaseGuide] = useState(false);
 
   // Copiar código do casal
   const handleCopyCode = () => {
@@ -77,24 +72,24 @@ export function SettingsScreen({
   const handleSaveNames = (e) => {
     e.preventDefault();
     const updated = [
-      { ...users[0], name: names.user1.trim() || 'Eu' },
-      { ...users[1], name: names.user2.trim() || 'Kassandra' }
+      { ...users[0], name: names.user1.trim() || 'Adryan' },
+      { ...users[1], name: names.user2.trim() || 'Kah' }
     ];
     onUpdateUsers(updated);
     alert('Nomes atualizados com sucesso!');
   };
 
-  // Salvar Firebase Config
-  const handleSaveFirebase = (e) => {
+  // Salvar Supabase Config
+  const handleSaveSupabase = (e) => {
     e.preventDefault();
-    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-      alert('Preencha ao menos o apiKey e o projectId do Firebase.');
+    if (!supabaseConfig.url || !supabaseConfig.anonKey) {
+      alert('Preencha a URL e a Anon Key do seu projeto Supabase.');
       return;
     }
-    saveStoredFirebaseConfig(firebaseConfig);
-    setFirebaseSaved(true);
+    saveStoredSupabaseConfig(supabaseConfig.url, supabaseConfig.anonKey);
+    setSupabaseSaved(true);
     setTimeout(() => {
-      setFirebaseSaved(false);
+      setSupabaseSaved(false);
       window.location.reload();
     }, 1500);
   };
@@ -108,16 +103,18 @@ export function SettingsScreen({
     });
   };
 
+  const isSupabaseConnected = Boolean(getSupabase());
+
   return (
     <div>
       <div style={{ marginBottom: '16px' }}>
         <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>Configurações do Casal</h2>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          Gerencie a conexão dos celulares, nomes, notificações e sincronização.
+          Gerencie seu perfil, conexão em nuvem, banco de dados e preferências.
         </p>
       </div>
 
-      {/* BLOCO 1: Conexão do Casal (Compartilhamento) */}
+      {/* BLOCO 1: Conexão do Casal */}
       <div className="card" style={{ borderColor: 'var(--accent-primary)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
           <Share2 size={18} color="var(--accent-primary)" />
@@ -125,7 +122,7 @@ export function SettingsScreen({
         </div>
 
         <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-          Para sua esposa usar no celular dela com os mesmos dados sincronizados, passe este código:
+          Código padrão ativo para Adryan e Kah:
         </p>
 
         <div
@@ -141,7 +138,7 @@ export function SettingsScreen({
           }}
         >
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Código do seu casal:</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Código de Sincronia:</div>
             <div style={{ fontSize: '1.3rem', fontWeight: '800', letterSpacing: '0.05em', color: 'var(--accent-primary)' }}>
               {coupleCode}
             </div>
@@ -154,34 +151,120 @@ export function SettingsScreen({
 
         {/* Entrar em um código existente */}
         <form onSubmit={handleJoinCouple} style={{ marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
-          <label className="form-label">Já possui um código criado pelo parceiro?</label>
+          <label className="form-label">Quer mudar o código do casal?</label>
           <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
             <input
               type="text"
               className="form-input"
-              placeholder="Ex: PAZ-4829"
+              placeholder="Ex: CASAL-PAZ ou PAZ-4829"
               value={inputCode}
               onChange={(e) => setInputCode(e.target.value)}
               style={{ textTransform: 'uppercase' }}
             />
             <button type="submit" className="btn btn-secondary" style={{ whiteSpace: 'nowrap' }}>
-              Entrar
+              Alterar
             </button>
           </div>
         </form>
       </div>
 
-      {/* BLOCO 2: Nomes e Perfis */}
+      {/* BLOCO 2: Banco de Dados Supabase */}
+      <div className="card">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Database size={18} color="var(--accent-primary)" />
+            <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Banco de Dados (Supabase)</h3>
+          </div>
+          <span
+            style={{
+              fontSize: '0.72rem',
+              fontWeight: '700',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: isSupabaseConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+              color: isSupabaseConnected ? 'var(--accent-primary)' : 'var(--text-muted)'
+            }}
+          >
+            {isSupabaseConnected ? '● Supabase Conectado' : '○ Modo WebSocket Nativo'}
+          </span>
+        </div>
+
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+          O app já sincroniza em tempo real pelo canal do casal! Para persistência definitiva com histórico no seu próprio banco de dados Postgres gratuito, insira suas credenciais do Supabase.
+        </p>
+
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ width: '100%', padding: '8px 12px', fontSize: '0.82rem', marginBottom: '12px' }}
+          onClick={() => setShowSupabaseGuide(!showSupabaseGuide)}
+        >
+          <span>{showSupabaseGuide ? 'Ocultar Guia do Supabase' : 'Como criar o Supabase em 2 minutos (Guia)'}</span>
+        </button>
+
+        {showSupabaseGuide && (
+          <div
+            style={{
+              backgroundColor: 'var(--bg-app)',
+              padding: '12px 14px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              marginBottom: '14px',
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              lineHeight: '1.5'
+            }}
+          >
+            <strong style={{ color: 'var(--text-primary)' }}>Passo a passo no Supabase (100% Gratuito):</strong>
+            <ol style={{ paddingLeft: '18px', marginTop: '6px' }}>
+              <li>Acesse <strong>supabase.com</strong> e crie uma conta gratuita (pode usar o GitHub).</li>
+              <li>Clique em <strong>"New Project"</strong> e dê o nome: <code>casa-em-paz</code>.</li>
+              <li>Vá em <strong>Project Settings ➔ API</strong> e copie a <strong>Project URL</strong> e a <strong>anon public key</strong>.</li>
+              <li>Cole nos campos abaixo e clique em Salvar!</li>
+            </ol>
+          </div>
+        )}
+
+        <form onSubmit={handleSaveSupabase}>
+          <div className="form-group">
+            <label className="form-label">Project URL</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="https://xyzcompany.supabase.co"
+              value={supabaseConfig.url}
+              onChange={(e) => setSupabaseConfig({ ...supabaseConfig, url: e.target.value.trim() })}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">API Anon Key</label>
+            <input
+              type="password"
+              className="form-input"
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              value={supabaseConfig.anonKey}
+              onChange={(e) => setSupabaseConfig({ ...supabaseConfig, anonKey: e.target.value.trim() })}
+            />
+          </div>
+
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '10px', marginTop: '4px' }}>
+            {supabaseSaved ? 'Salvo e Reiniciando...' : 'Salvar e Conectar Supabase'}
+          </button>
+        </form>
+      </div>
+
+      {/* BLOCO 3: Nomes dos Parceiros */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <Users size={18} />
-          <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Nomes dos Parceiros</h3>
+          <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Nomes do Casal</h3>
         </div>
 
         <form onSubmit={handleSaveNames}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
             <div className="form-group">
-              <label className="form-label">{users[0]?.avatar} Parceiro 1</label>
+              <label className="form-label">{users[0]?.avatar} Ele</label>
               <input
                 type="text"
                 className="form-input"
@@ -190,7 +273,7 @@ export function SettingsScreen({
               />
             </div>
             <div className="form-group">
-              <label className="form-label">{users[1]?.avatar} Parceira 2</label>
+              <label className="form-label">{users[1]?.avatar} Ela</label>
               <input
                 type="text"
                 className="form-input"
@@ -200,19 +283,19 @@ export function SettingsScreen({
             </div>
           </div>
           <button type="submit" className="btn btn-secondary" style={{ width: '100%', padding: '10px' }}>
-            Salvar Nomes
+            Atualizar Nomes
           </button>
         </form>
       </div>
 
-      {/* BLOCO 3: Meta de Divisão (50/50 ou ajustável) */}
+      {/* BLOCO 4: Meta de Divisão (50/50 ou ajustável) */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
           <Sliders size={18} />
           <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Meta de Divisão do Esforço</h3>
         </div>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-          Por padrão, o app busca o equilíbrio perfeito (50% / 50%). Se um dos parceiros trabalhar muito mais horas fora, você pode ajustar a proporção:
+          Por padrão, o app busca o equilíbrio perfeito (50% / 50%).
         </p>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: '700', fontSize: '0.95rem', marginBottom: '6px' }}>
@@ -229,111 +312,6 @@ export function SettingsScreen({
           onChange={(e) => handleRatioChange(e.target.value)}
           style={{ width: '100%', accentColor: 'var(--accent-primary)', height: '6px', cursor: 'pointer' }}
         />
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-          <span>30% / 70%</span>
-          <span>50% / 50% (Recomendado)</span>
-          <span>70% / 30%</span>
-        </div>
-      </div>
-
-      {/* BLOCO 4: Sincronização Online Firebase */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Database size={18} color={syncStatus.online ? 'var(--accent-primary)' : 'var(--text-muted)'} />
-            <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Banco Online (Firebase)</h3>
-          </div>
-          <span
-            style={{
-              fontSize: '0.72rem',
-              fontWeight: '700',
-              padding: '2px 8px',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: syncStatus.online ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.12)',
-              color: syncStatus.online ? 'var(--accent-primary)' : 'var(--text-muted)'
-            }}
-          >
-            {syncStatus.online ? '● Conectado em Tempo Real' : '○ Modo Local / Offline'}
-          </span>
-        </div>
-
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-          O app já funciona 100% no seu aparelho! Para sincronizar em tempo real entre dois celulares diferentes, insira as credenciais do seu projeto gratuito do Firebase.
-        </p>
-
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ width: '100%', padding: '8px 12px', fontSize: '0.82rem', marginBottom: '12px' }}
-          onClick={() => setShowFirebaseGuide(!showFirebaseGuide)}
-        >
-          <span>{showFirebaseGuide ? 'Ocultar Tutorial Passo a Passo' : 'Ver Tutorial Passo a Passo para Leigos'}</span>
-        </button>
-
-        {showFirebaseGuide && (
-          <div
-            style={{
-              backgroundColor: 'var(--bg-app)',
-              padding: '12px 14px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
-              marginBottom: '14px',
-              fontSize: '0.8rem',
-              color: 'var(--text-secondary)',
-              lineHeight: '1.5'
-            }}
-          >
-            <strong style={{ color: 'var(--text-primary)' }}>Como criar seu banco gratuito em 3 minutos:</strong>
-            <ol style={{ paddingLeft: '18px', marginTop: '6px' }}>
-              <li>Acesse <strong>console.firebase.google.com</strong> com sua conta Google.</li>
-              <li>Clique em <strong>"Adicionar projeto"</strong> e dê o nome "Casa em Paz".</li>
-              <li>No menu lateral, clique em <strong>"Criação" → "Firestore Database"</strong> e crie o banco em modo de teste.</li>
-              <li>Na engrenagem ⚙️ (Configurações do Projeto), role até o final e clique no ícone da Web <strong>&lt;/&gt;</strong> para registrar o app.</li>
-              <li>Copie os valores do <code>firebaseConfig</code> e cole abaixo:</li>
-            </ol>
-          </div>
-        )}
-
-        <form onSubmit={handleSaveFirebase}>
-          <div className="form-group">
-            <label className="form-label">apiKey</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="AIzaSy..."
-              value={firebaseConfig.apiKey}
-              onChange={(e) => setFirebaseConfig({ ...firebaseConfig, apiKey: e.target.value.trim() })}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <div className="form-group">
-              <label className="form-label">projectId</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="casa-em-paz-123"
-                value={firebaseConfig.projectId}
-                onChange={(e) => setFirebaseConfig({ ...firebaseConfig, projectId: e.target.value.trim() })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">authDomain</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="casa-em-paz-123.firebaseapp.com"
-                value={firebaseConfig.authDomain}
-                onChange={(e) => setFirebaseConfig({ ...firebaseConfig, authDomain: e.target.value.trim() })}
-              />
-            </div>
-          </div>
-
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '10px', marginTop: '4px' }}>
-            {firebaseSaved ? 'Salvo e Reiniciando...' : 'Salvar e Conectar Banco Online'}
-          </button>
-        </form>
       </div>
 
       {/* BLOCO 5: Notificações e Testes */}
@@ -343,7 +321,7 @@ export function SettingsScreen({
           <h3 style={{ fontSize: '1rem', fontWeight: '700' }}>Notificações & Lembretes</h3>
         </div>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-          O app avisa suavemente no horário agendado de cada tarefa com um tom calmo de sino tibetano.
+          Avisa no horário de cada tarefa e quando o parceiro envia um recado ou reclamação.
         </p>
 
         <button
@@ -356,7 +334,7 @@ export function SettingsScreen({
         </button>
       </div>
 
-      {/* BLOCO 6: Tema e Restauração */}
+      {/* BLOCO 6: Tema, Restauração e Logout */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -364,22 +342,31 @@ export function SettingsScreen({
             <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>Aparência</span>
           </div>
           <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={onToggleTheme}>
-            {theme === 'dark' ? 'Mudar p/ Modo Claro ☀️' : 'Mudar p/ Modo Escuro 🌙'}
+            {theme === 'dark' ? 'Modo Claro ☀️' : 'Modo Escuro 🌙'}
           </button>
         </div>
 
-        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '12px' }}>
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button
+            className="btn btn-secondary"
+            style={{ width: '100%', padding: '10px', fontSize: '0.85rem' }}
+            onClick={onLogout}
+          >
+            <LogOut size={16} />
+            <span>Sair da Conta ({activeUser.name})</span>
+          </button>
+
           <button
             className="btn btn-secondary"
             style={{ width: '100%', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)', padding: '10px', fontSize: '0.85rem' }}
             onClick={() => {
-              if (confirm('Tem certeza? Isso restaurará as tarefas padrão da casa (ração dos gatos, caixa de areia, louça, plantas, etc.) e o equilíbrio original.')) {
+              if (confirm('Tem certeza? Isso restaurará as tarefas padrão da casa e o equilíbrio original.')) {
                 onResetToDefaults();
               }
             }}
           >
             <RotateCcw size={16} />
-            <span>Restaurar Tarefas e Dados Padrão</span>
+            <span>Restaurar Tarefas Padrão da Casa</span>
           </button>
         </div>
       </div>

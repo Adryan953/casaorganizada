@@ -8,6 +8,8 @@ import { TasksScreen } from './screens/TasksScreen';
 import { AvailabilityScreen } from './screens/AvailabilityScreen';
 import { SwapsScreen } from './screens/SwapsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { FeedbackScreen } from './screens/FeedbackScreen';
+import { LoginScreen } from './screens/LoginScreen';
 import {
   loadLocalData,
   subscribeToCouple,
@@ -17,16 +19,23 @@ import {
   getDefaultAppState
 } from './services/storageService';
 import { generateWeeklySchedule, formatDateKey } from './services/schedulerService';
-import { triggerNotification } from './services/notificationService';
+import { triggerNotification, playChimeSound } from './services/notificationService';
+import { getCurrentAuthUser, logout } from './services/authService';
+import { insertFeedbackSupabase, updateFeedbackSupabase, initSupabase } from './services/supabaseService';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(() => getCurrentAuthUser());
   const [appData, setAppData] = useState(() => loadLocalData());
-  const [activeUserId, setActiveUser] = useState(() => getActiveUserId());
   const [activeScreen, setActiveScreen] = useState('today');
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('casa_em_paz_theme') || 'light';
   });
   const [syncStatus, setSyncStatus] = useState({ online: true, reason: 'connecting', mode: 'realtime' });
+
+  // Inicializa Supabase em segundo plano se configurado
+  useEffect(() => {
+    initSupabase();
+  }, []);
 
   // Aplica o tema visual no elemento HTML
   useEffect(() => {
@@ -53,9 +62,17 @@ export default function App() {
     };
   }, [appData.coupleCode]);
 
+  // Se o usuário logou, garante que o activeUserId é o dele
+  useEffect(() => {
+    if (currentUser && currentUser.id) {
+      setActiveUserId(currentUser.id);
+    }
+  }, [currentUser]);
+
   // Checagem de lembretes no horário (a cada minuto)
   useEffect(() => {
     const checkReminders = () => {
+      if (!currentUser) return;
       const now = new Date();
       const currentHours = String(now.getHours()).padStart(2, '0');
       const currentMinutes = String(now.getMinutes()).padStart(2, '0');
@@ -65,7 +82,7 @@ export default function App() {
       const matchingTasks = (appData.weeklySchedule || []).filter(
         (t) =>
           t.date === todayKey &&
-          t.assignedTo === activeUserId &&
+          t.assignedTo === currentUser.id &&
           !t.completed &&
           t.preferredTime === currentTimeStr
       );
@@ -79,15 +96,23 @@ export default function App() {
 
     const interval = setInterval(checkReminders, 60000);
     return () => clearInterval(interval);
-  }, [appData.weeklySchedule, activeUserId]);
+  }, [appData.weeklySchedule, currentUser]);
 
   const activeUser =
-    (appData.users || []).find((u) => u.id === activeUserId) || appData.users[0];
+    (appData.users || []).find((u) => u.id === (currentUser?.id || getActiveUserId())) || appData.users[0];
 
   // Alterna usuário ativo no aparelho
   const handleSwitchUser = (userId) => {
-    setActiveUser(userId);
-    setActiveUserId(userId);
+    const targetUser = (appData.users || []).find((u) => u.id === userId);
+    if (targetUser) {
+      setCurrentUser(targetUser);
+      setActiveUserId(userId);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    setCurrentUser(null);
   };
 
   // Alternar Modo Claro / Escuro
@@ -95,16 +120,12 @@ export default function App() {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Atualizar Status da Tarefa (Concluída ou Aberta) - Sincronizado instantaneamente
+  // Concluir / Reabrir Tarefa
   const handleUpdateTaskStatus = (instanceId, completed) => {
     const completedAt = completed ? new Date().toISOString() : null;
     const updatedSchedule = (appData.weeklySchedule || []).map((item) => {
       if (item.instanceId === instanceId) {
-        return {
-          ...item,
-          completed,
-          completedAt
-        };
+        return { ...item, completed, completedAt };
       }
       return item;
     });
@@ -112,7 +133,6 @@ export default function App() {
     const updatedData = { ...appData, weeklySchedule: updatedSchedule };
     setAppData(updatedData);
 
-    // Transmite o evento em tempo real via canal do casal
     syncSaveData(updatedData, {
       type: 'TASK_STATUS',
       instanceId,
@@ -121,15 +141,12 @@ export default function App() {
     });
   };
 
-  // Passar Tarefa para o Parceiro (com carinho) - Sincronizado instantaneamente
+  // Passar Tarefa para o Parceiro
   const handleDelegateTask = (instanceId, toUserId) => {
     const partner = (appData.users || []).find((u) => u.id === toUserId);
     const updatedSchedule = (appData.weeklySchedule || []).map((item) => {
       if (item.instanceId === instanceId) {
-        return {
-          ...item,
-          assignedTo: toUserId
-        };
+        return { ...item, assignedTo: toUserId };
       }
       return item;
     });
@@ -146,7 +163,7 @@ export default function App() {
     alert(`Tarefa passada com amor para ${partner?.name || 'seu parceiro'}! 💖`);
   };
 
-  // Adiar Tarefa para Amanhã (sem culpa) - Sincronizado instantaneamente
+  // Adiar Tarefa para Amanhã
   const handlePostponeTask = (instanceId) => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -156,11 +173,7 @@ export default function App() {
     const updatedSchedule = (appData.weeklySchedule || []).map((item) => {
       if (item.instanceId === instanceId) {
         newInstanceId = `${item.taskId}_${tomorrowKey}`;
-        return {
-          ...item,
-          date: tomorrowKey,
-          instanceId: newInstanceId
-        };
+        return { ...item, date: tomorrowKey, instanceId: newInstanceId };
       }
       return item;
     });
@@ -178,7 +191,7 @@ export default function App() {
     alert('Tarefa transferida para amanhã com tranquilidade! Descanse hoje. ✨');
   };
 
-  // Criar Pedido de Troca - Sincronizado instantaneamente
+  // Criar Pedido de Troca
   const handleCreateSwap = (newSwap) => {
     const updatedSwaps = [newSwap, ...(appData.swaps || [])];
     const updatedData = { ...appData, swaps: updatedSwaps };
@@ -192,14 +205,11 @@ export default function App() {
     alert('Pedido de troca enviado com sucesso! 🤝');
   };
 
-  // Aceitar Troca - Sincronizado instantaneamente
+  // Aceitar Troca
   const handleAcceptSwap = (swap) => {
     const updatedSchedule = (appData.weeklySchedule || []).map((item) => {
       if (item.instanceId === swap.taskInstanceId) {
-        return {
-          ...item,
-          assignedTo: swap.toUserId
-        };
+        return { ...item, assignedTo: swap.toUserId };
       }
       return item;
     });
@@ -230,7 +240,7 @@ export default function App() {
     alert('Troca aceita! A tarefa agora está na sua lista com muito carinho. 💖');
   };
 
-  // Recusar Troca com Gentileza - Sincronizado instantaneamente
+  // Recusar Troca
   const handleDeclineSwap = (swapId) => {
     const updatedSwaps = (appData.swaps || []).map((s) => {
       if (s.id === swapId) {
@@ -247,6 +257,47 @@ export default function App() {
       swapId,
       status: 'declined'
     });
+  };
+
+  // Criar Reclamação / Desabafo com Foto
+  const handleCreateFeedback = (newFeedback) => {
+    const updatedFeedbacks = [newFeedback, ...(appData.feedbacks || [])];
+    const updatedData = { ...appData, feedbacks: updatedFeedbacks };
+    setAppData(updatedData);
+
+    // Envia evento em tempo real pelo canal do casal
+    syncSaveData(updatedData, {
+      type: 'FEEDBACK_CREATE',
+      feedback: newFeedback
+    });
+
+    // Envia ao Supabase se configurado
+    insertFeedbackSupabase({
+      ...newFeedback,
+      coupleCode: appData.coupleCode
+    });
+  };
+
+  // Responder ou Resolver Reclamação
+  const handleResolveFeedback = (feedbackId, updates) => {
+    const updatedFeedbacks = (appData.feedbacks || []).map((f) => {
+      if (f.id === feedbackId) {
+        return { ...f, ...updates };
+      }
+      return f;
+    });
+
+    const updatedData = { ...appData, feedbacks: updatedFeedbacks };
+    setAppData(updatedData);
+
+    syncSaveData(updatedData, {
+      type: 'FEEDBACK_RESOLVE',
+      feedbackId,
+      ...updates
+    });
+
+    // Atualiza no Supabase se configurado
+    updateFeedbackSupabase(feedbackId, updates);
   };
 
   // Salvar Tarefa (Criar ou Editar)
@@ -310,7 +361,7 @@ export default function App() {
     syncSaveData(updatedData);
   };
 
-  // Salvar Código do Casal (Conectar a outro código)
+  // Salvar Código do Casal
   const handleUpdateCoupleCode = (newCode) => {
     const updatedData = { ...appData, coupleCode: newCode };
     setAppData(updatedData);
@@ -339,9 +390,18 @@ export default function App() {
     alert('Tarefas e rotina restauradas com sucesso para o padrão da casa! 🌿');
   };
 
-  // Contagem de trocas pendentes para o badge
+  // Se não estiver logado, exibe tela de login elegante
+  if (!currentUser) {
+    return <LoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
+  }
+
+  // Contadores de badges
   const pendingSwapsCount = (appData.swaps || []).filter(
-    (s) => s.toUserId === activeUserId && s.status === 'pending'
+    (s) => s.toUserId === activeUser.id && s.status === 'pending'
+  ).length;
+
+  const unreadFeedbacksCount = (appData.feedbacks || []).filter(
+    (f) => f.toUserId === activeUser.id && f.status !== 'resolved'
   ).length;
 
   return (
@@ -356,9 +416,10 @@ export default function App() {
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onOpenSettings={() => setActiveScreen('settings')}
+        onLogout={handleLogout}
       />
 
-      {/* Conteúdo Principal com as 7 Telas */}
+      {/* Conteúdo Principal com as 8 Telas */}
       <main className="app-content">
         {activeScreen === 'today' && (
           <TodayScreen
@@ -400,6 +461,16 @@ export default function App() {
           />
         )}
 
+        {activeScreen === 'feedbacks' && (
+          <FeedbackScreen
+            activeUser={activeUser}
+            users={appData.users}
+            feedbacks={appData.feedbacks || []}
+            onCreateFeedback={handleCreateFeedback}
+            onResolveFeedback={handleResolveFeedback}
+          />
+        )}
+
         {activeScreen === 'availability' && (
           <AvailabilityScreen
             users={appData.users}
@@ -434,6 +505,7 @@ export default function App() {
             onUpdateTargetRatio={handleUpdateTargetRatio}
             onResetToDefaults={handleResetToDefaults}
             syncStatus={syncStatus}
+            onLogout={handleLogout}
           />
         )}
       </main>
@@ -443,6 +515,7 @@ export default function App() {
         activeScreen={activeScreen}
         onChangeScreen={setActiveScreen}
         pendingSwapsCount={pendingSwapsCount}
+        unreadFeedbacksCount={unreadFeedbacksCount}
       />
     </div>
   );

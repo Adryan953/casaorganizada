@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Moon, Sun, Wifi, WifiOff } from 'lucide-react';
+import { Sparkles, Moon, Sun, Wifi, WifiOff, LogOut } from 'lucide-react';
 
 export function Header({
   activeUser,
@@ -9,7 +9,8 @@ export function Header({
   coupleCode,
   theme,
   onToggleTheme,
-  onOpenSettings
+  onOpenSettings,
+  onLogout
 }) {
   const otherUser = users.find((u) => u.id !== activeUser.id) || users[1];
 
@@ -30,7 +31,7 @@ export function Header({
         </div>
 
         {/* Controles do Topo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {/* Status de Sincronização em Tempo Real */}
           <div
             title={syncStatus.online ? 'Sincronizado ao vivo entre os celulares' : 'Conectando à nuvem...'}
@@ -67,8 +68,20 @@ export function Header({
             aria-label="Alternar modo claro e escuro"
             title="Alternar tema"
           >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
+
+          {/* Botão Sair */}
+          {onLogout && (
+            <button
+              className="btn-icon-subtle"
+              onClick={onLogout}
+              aria-label="Sair da conta"
+              title="Trocar de conta / Sair"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
         </div>
       </div>
 

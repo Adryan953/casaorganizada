@@ -50,6 +50,7 @@ export function getDefaultAppState() {
     weeklySchedule: initialSchedule.schedule,
     targetRatio: { user1: 50, user2: 50 },
     swaps: [],
+    feedbacks: [],
     history: {
       lastWeekHeavyAssignment: initialSchedule.heavyAssignments || {}
     },
@@ -245,6 +246,23 @@ export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange
             return t;
           });
         }
+      } else if (payload.type === 'FEEDBACK_CREATE') {
+        const exists = (current.feedbacks || []).some((f) => f.id === payload.feedback.id);
+        if (!exists) {
+          updated.feedbacks = [payload.feedback, ...(current.feedbacks || [])];
+        }
+      } else if (payload.type === 'FEEDBACK_RESOLVE') {
+        updated.feedbacks = (current.feedbacks || []).map((f) => {
+          if (f.id === payload.feedbackId) {
+            return {
+              ...f,
+              status: payload.status,
+              responseNote: payload.responseNote,
+              resolvedAt: payload.resolvedAt || new Date().toISOString()
+            };
+          }
+          return f;
+        });
       } else if (payload.type === 'FULL_STATE_UPDATE') {
         // Atualização completa recebida
         if (payload.data && payload.data.updatedAt) {

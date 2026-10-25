@@ -3,18 +3,39 @@
 
 export const DEFAULT_USERS = [
   {
-    id: 'user1',
-    name: 'Eu',
-    avatar: '🧔',
-    color: '#3b82f6', // Azul suave acolhedor
+    id: 'adryan',
+    username: 'Adryan',
+    name: 'Adryan',
+    avatar: '🧔‍♂️',
+    color: '#3b82f6', // Azul acolhedor
     role: 'Parceiro'
   },
   {
-    id: 'user2',
-    name: 'Kassandra',
-    avatar: '👩',
-    color: '#ec4899', // Rosa vibrante acolhedor
+    id: 'kah',
+    username: 'Kah',
+    name: 'Kah',
+    avatar: '👩‍🦰',
+    color: '#ec4899', // Rosa afeto
     role: 'Parceira'
+  }
+];
+
+export const VALID_CREDENTIALS = [
+  {
+    id: 'adryan',
+    username: 'Adryan',
+    password: 'Adryan123',
+    name: 'Adryan',
+    avatar: '🧔‍♂️',
+    color: '#3b82f6'
+  },
+  {
+    id: 'kah',
+    username: 'Kah',
+    password: 'Kah123',
+    name: 'Kah',
+    avatar: '👩‍🦰',
+    color: '#ec4899'
   }
 ];
 
@@ -44,7 +65,7 @@ export const INITIAL_TASKS = [
     preferredTime: '07:30',
     durationMinutes: 5,
     effortLevel: 1, // Leve
-    overloadsUsers: ['user2'], // Kassandra marcou como sobrecarga
+    overloadsUsers: ['kah'], // Kah marcou como sobrecarga
     description: 'Servir ração fresca e trocar a água das tigelas dos gatinhos.'
   },
   {
@@ -57,7 +78,7 @@ export const INITIAL_TASKS = [
     preferredTime: '13:00',
     durationMinutes: 5,
     effortLevel: 1,
-    overloadsUsers: ['user2'],
+    overloadsUsers: ['kah'],
     description: 'Verificar potinho de ração da tarde.'
   },
   {
@@ -70,7 +91,7 @@ export const INITIAL_TASKS = [
     preferredTime: '19:30',
     durationMinutes: 5,
     effortLevel: 1,
-    overloadsUsers: ['user2'],
+    overloadsUsers: ['kah'],
     description: 'Última refeição dos bichanos antes de dormir.'
   },
   {
@@ -82,7 +103,7 @@ export const INITIAL_TASKS = [
     preferredTime: '08:30',
     durationMinutes: 10,
     effortLevel: 2, // Médio
-    overloadsUsers: ['user2'], // Kassandra marcou como sobrecarga
+    overloadsUsers: ['kah'], // Kah marcou como sobrecarga
     description: 'Peneirar areia, remover torrões e repor se necessário.'
   },
   {
@@ -94,7 +115,7 @@ export const INITIAL_TASKS = [
     preferredTime: '14:00',
     durationMinutes: 20,
     effortLevel: 2, // Médio
-    overloadsUsers: ['user2'], // Kassandra marcou como sobrecarga
+    overloadsUsers: ['kah'], // Kah marcou como sobrecarga
     description: 'Lavar os pratos, talheres, panelas e limpar a pia.'
   },
   {
@@ -106,7 +127,7 @@ export const INITIAL_TASKS = [
     preferredTime: '20:30',
     durationMinutes: 20,
     effortLevel: 2, // Médio
-    overloadsUsers: ['user2'], // Kassandra marcou como sobrecarga
+    overloadsUsers: ['kah'], // Kah marcou como sobrecarga
     description: 'Deixar a pia limpa e seca para a manhã seguinte.'
   },
   {
@@ -125,7 +146,7 @@ export const INITIAL_TASKS = [
     id: 'varrer-passar-pano',
     title: 'Varrer e passar pano na casa',
     category: 'limpeza',
-    frequency: '2x_week', // Ex: Terça e Sexta
+    frequency: '2x_week',
     preferredDays: [2, 5],
     period: 'morning',
     preferredTime: '09:00',
@@ -157,7 +178,7 @@ export const INITIAL_TASKS = [
     preferredTime: '09:30',
     durationMinutes: 60,
     effortLevel: 3, // Pesado
-    overloadsUsers: ['user2'], // Kassandra marcou como sobrecarga
+    overloadsUsers: ['kah'], // Kah marcou como sobrecarga
     description: 'Esfregar e enxaguar peças delicadas e toalhas à mão no tanque.'
   },
   {
@@ -186,8 +207,7 @@ export const DAYS_OF_WEEK = [
 ];
 
 export const INITIAL_AVAILABILITY = {
-  user1: {
-    // 0: Dom, 1: Seg, ...
+  adryan: {
     0: { type: 'normal', freeMinutes: 180, morning: true, afternoon: true, night: true },
     1: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     2: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
@@ -196,7 +216,7 @@ export const INITIAL_AVAILABILITY = {
     5: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     6: { type: 'off', freeMinutes: 300, morning: true, afternoon: true, night: true }
   },
-  user2: {
+  kah: {
     0: { type: 'off', freeMinutes: 300, morning: true, afternoon: true, night: true },
     1: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     2: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },

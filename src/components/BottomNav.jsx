@@ -6,16 +6,27 @@ import {
   ListTodo,
   Clock,
   ArrowLeftRight,
+  MessageSquareWarning,
   Settings
 } from 'lucide-react';
 
-export function BottomNav({ activeScreen, onChangeScreen, pendingSwapsCount = 0 }) {
+export function BottomNav({
+  activeScreen,
+  onChangeScreen,
+  pendingSwapsCount = 0,
+  unreadFeedbacksCount = 0
+}) {
   const navItems = [
     { id: 'today', label: 'Hoje', icon: CalendarCheck },
     { id: 'week', label: 'Semana', icon: CalendarDays },
     { id: 'balance', label: 'Equilíbrio', icon: Scale },
     { id: 'tasks', label: 'Tarefas', icon: ListTodo },
-    { id: 'availability', label: 'Horários', icon: Clock },
+    {
+      id: 'feedbacks',
+      label: 'Desabafos',
+      icon: MessageSquareWarning,
+      badge: unreadFeedbacksCount > 0 ? unreadFeedbacksCount : null
+    },
     {
       id: 'swaps',
       label: 'Trocas',

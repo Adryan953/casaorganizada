@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="peaceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="50%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+    <linearGradient id="heartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f43f5e" />
+      <stop offset="100%" stop-color="#fb7185" />
+    </linearGradient>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.25" />
+    </filter>
+  </defs>
+  
+  <!-- Fundo Circular Acolhedor -->
+  <rect width="512" height="512" rx="128" fill="url(#peaceGrad)" />
+  
+  <!-- Silhueta da Casa Branca Limpa -->
+  <g filter="url(#softShadow)" fill="#ffffff">
+    <!-- Telhado e corpo da casa -->
+    <path d="M256 96 L96 232 C86 240 92 256 106 256 L134 256 L134 388 C134 402 146 414 160 414 L352 414 C366 414 378 402 378 388 L378 256 L406 256 C420 256 426 240 416 232 Z" />
+  </g>
+
+  <!-- Coração Central simbolizando Amor, Equilíbrio e Paz -->
+  <path d="M256 340 C256 340 200 300 200 256 C200 234 218 216 240 216 C250 216 256 224 256 224 C256 224 262 216 272 216 C294 216 312 234 312 256 C312 300 256 340 256 340 Z" fill="url(#heartGrad)" />
+
+  <!-- Folhinha no teto simbolizando frescor e equilíbrio -->
+  <path d="M280 120 C310 110 325 80 325 80 C325 80 295 85 280 120 Z" fill="#34d399" />
+</svg>

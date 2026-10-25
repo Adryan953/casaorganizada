@@ -1,0 +1,54 @@
+name: Gerar APK Android Casa em Paz
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Compilar APK Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Configurar Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Compilar Web App (dist)
+        run: npm run build
+
+      - name: Inicializar Capacitor Android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Compilar APK via Gradle
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Disponibilizar APK para Download Direto
+        uses: actions/upload-artifact@v4
+        with:
+          name: CasaEmPaz-Instalador-Android
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

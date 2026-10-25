@@ -57,22 +57,18 @@ export function LoginScreen({ onLoginSuccess }) {
     >
       <div className="card" style={{ padding: '28px 20px', textAlign: 'center', borderColor: 'var(--border-subtle)' }}>
         {/* Logo */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-          <div
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+          <img
+            src="/logo.png"
+            alt="Casa em Paz"
             style={{
-              width: '60px',
-              height: '60px',
-              borderRadius: 'var(--radius-lg)',
-              background: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: 'var(--shadow-md)'
+              width: '100px',
+              height: '100px',
+              borderRadius: '24px',
+              objectFit: 'cover',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
             }}
-          >
-            <Sparkles size={32} />
-          </div>
+          />
         </div>
 
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', fontWeight: '800', marginBottom: '4px' }}>

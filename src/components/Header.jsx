@@ -19,9 +19,17 @@ export function Header({
       <div className="header-top-row">
         {/* Marca do App */}
         <div className="brand-wrapper">
-          <div className="brand-logo">
-            <Sparkles size={20} />
-          </div>
+          <img
+            src="/logo.png"
+            alt="Casa em Paz"
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              objectFit: 'cover',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+            }}
+          />
           <div>
             <h1 className="brand-title">Casa em Paz</h1>
             <p className="brand-subtitle">

@@ -213,3 +213,115 @@ export function subscribeToSupabaseFeedbacks(coupleCode, onFeedbackChanged) {
   }
 }
 
+/**
+ * Salva o estado completo das tarefas e rotinas do casal no banco de dados Supabase
+ */
+export async function saveCoupleStateSupabase(coupleCode, fullState) {
+  const client = getSupabase();
+  if (!client) return { success: false, reason: 'no_client' };
+
+  const code = (coupleCode || 'CASAL-PAZ').toUpperCase().trim();
+  try {
+    const { data, error } = await client
+      .from('couples_state')
+      .upsert({
+        couple_code: code,
+        state: fullState,
+        updated_at: new Date().toISOString()
+      })
+      .select();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err) {
+    console.warn('Erro ao sincronizar tarefas no Supabase (couples_state):', err);
+    return { success: false, error: err };
+  }
+}
+
+/**
+ * Busca o estado salvo das tarefas do casal na nuvem do Supabase
+ */
+export async function fetchCoupleStateSupabase(coupleCode) {
+  const client = getSupabase();
+  if (!client) return null;
+
+  const code = (coupleCode || 'CASAL-PAZ').toUpperCase().trim();
+  try {
+    const { data, error } = await client
+      .from('couples_state')
+      .select('*')
+      .eq('couple_code', code)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data && data.state) {
+      return {
+        ...data.state,
+        updatedAt: data.updated_at || data.state.updatedAt
+      };
+    }
+    return null;
+  } catch (err) {
+    console.warn('Erro ao carregar tarefas do Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Assina atualizações em tempo real das tarefas no Supabase para sincronização instantânea
+ */
+export function subscribeToCoupleStateSupabase(coupleCode, onRemoteStateReceived, onStatusChange) {
+  const client = getSupabase();
+  if (!client) {
+    if (onStatusChange) onStatusChange({ online: false, reason: 'no_client' });
+    return () => {};
+  }
+
+  const code = (coupleCode || 'CASAL-PAZ').toUpperCase().trim();
+
+  try {
+    const channel = client
+      .channel(`couple-state-${code}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'couples_state',
+          filter: `couple_code=eq.${code}`
+        },
+        (payload) => {
+          if (payload && payload.new && payload.new.state) {
+            onRemoteStateReceived({
+              ...payload.new.state,
+              updatedAt: payload.new.updated_at || payload.new.state.updatedAt
+            });
+            if (onStatusChange) {
+              onStatusChange({ online: true, reason: 'synced_remote', mode: 'supabase' });
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (onStatusChange) {
+            onStatusChange({ online: true, reason: 'connected', mode: 'supabase' });
+          }
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          if (onStatusChange) {
+            onStatusChange({ online: false, reason: status, mode: 'supabase' });
+          }
+        }
+      });
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Erro ao conectar Realtime de tarefas no Supabase:', err);
+    if (onStatusChange) onStatusChange({ online: false, reason: 'error' });
+    return () => {};
+  }
+}
+

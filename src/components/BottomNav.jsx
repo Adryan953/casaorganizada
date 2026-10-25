@@ -51,7 +51,7 @@ export function BottomNav({
             title={item.label}
           >
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IconComponent size={20} strokeWidth={isActive ? 2.5 : 2} />
+              <IconComponent size={18} strokeWidth={isActive ? 2.5 : 2} />
               {item.badge && <span className="nav-badge">{item.badge}</span>}
             </div>
             <span>{item.label}</span>

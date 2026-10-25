@@ -33,7 +33,10 @@ import {
   deleteFeedbackSupabase,
   initSupabase,
   fetchFeedbacksSupabase,
-  subscribeToSupabaseFeedbacks
+  subscribeToSupabaseFeedbacks,
+  saveCoupleStateSupabase,
+  fetchCoupleStateSupabase,
+  subscribeToCoupleStateSupabase
 } from './services/supabaseService';
 import { AttentionAlarmModal } from './components/AttentionAlarmModal';
 
@@ -47,12 +50,61 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState({ online: true, reason: 'connecting', mode: 'realtime' });
   const [activeAttentionAlarm, setActiveAttentionAlarm] = useState(null);
 
-  // Inicializa Supabase e sincroniza feedbacks do banco de forma segura
+  // Inicializa Supabase e sincroniza tarefas e feedbacks do banco de forma segura
   useEffect(() => {
     try {
       initSupabase();
 
-      // Carrega feedbacks salvos na nuvem
+      // 1. Carrega tarefas salvas na nuvem do Supabase (couples_state)
+      fetchCoupleStateSupabase(appData.coupleCode)
+        .then((cloudState) => {
+          if (cloudState && cloudState.tasks && cloudState.tasks.length > 0) {
+            setAppData((prev) => {
+              const localTime = new Date(prev.updatedAt || 0).getTime();
+              const cloudTime = new Date(cloudState.updatedAt || 0).getTime();
+              if (cloudTime >= localTime) {
+                return { ...prev, ...cloudState };
+              } else {
+                saveCoupleStateSupabase(prev.coupleCode, prev).catch(() => {});
+                return prev;
+              }
+            });
+            setSyncStatus({ online: true, reason: 'connected', mode: 'supabase' });
+          } else {
+            // Salva tarefas iniciais no Supabase na primeira conexão
+            saveCoupleStateSupabase(appData.coupleCode, appData).then(() => {
+              setSyncStatus({ online: true, reason: 'connected', mode: 'supabase' });
+            });
+          }
+        })
+        .catch((err) => {
+          console.warn('Busca de tarefas do Supabase avisou:', err);
+        });
+
+      // 2. Escuta tarefas do casal em tempo real via Supabase Realtime
+      const unsubCoupleState = subscribeToCoupleStateSupabase(
+        appData.coupleCode,
+        (remoteState) => {
+          if (remoteState && remoteState.tasks) {
+            setAppData((prev) => {
+              const localTime = new Date(prev.updatedAt || 0).getTime();
+              const remoteTime = new Date(remoteState.updatedAt || 0).getTime();
+              if (remoteTime > localTime) {
+                return { ...prev, ...remoteState };
+              }
+              return prev;
+            });
+            setSyncStatus({ online: true, reason: 'synced_remote', mode: 'supabase' });
+          }
+        },
+        (status) => {
+          if (status.online) {
+            setSyncStatus({ online: true, reason: 'connected', mode: 'supabase' });
+          }
+        }
+      );
+
+      // 3. Carrega feedbacks salvos na nuvem
       fetchFeedbacksSupabase(appData.coupleCode)
         .then((cloudFeedbacks) => {
           if (cloudFeedbacks && cloudFeedbacks.length > 0) {
@@ -68,7 +120,7 @@ export default function App() {
           console.warn('Busca de feedbacks do Supabase avisou (offline/conexao):', err);
         });
 
-      // Escuta novos feedbacks em tempo real via Supabase Realtime
+      // 4. Escuta novos feedbacks em tempo real via Supabase Realtime
       const unsubFeedbacks = subscribeToSupabaseFeedbacks(appData.coupleCode, ({ eventType, feedback, feedbackId }) => {
         if (eventType === 'DELETE' && feedbackId) {
           setAppData((prev) => ({
@@ -121,8 +173,17 @@ export default function App() {
         });
       });
 
+      // 5. Monitora status de conexão da internet do celular
+      const handleOnline = () => setSyncStatus({ online: true, reason: 'connected', mode: 'online' });
+      const handleOffline = () => setSyncStatus({ online: false, reason: 'offline', mode: 'offline' });
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+
       return () => {
+        if (unsubCoupleState) unsubCoupleState();
         if (unsubFeedbacks) unsubFeedbacks();
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
       };
     } catch (err) {
       console.warn('Erro ao inicializar servicos de nuvem:', err);
@@ -135,7 +196,7 @@ export default function App() {
     localStorage.setItem('casa_em_paz_theme', theme);
   }, [theme]);
 
-  // Sincronização em tempo real (WebSocket + Nuvem)
+  // Sincronização em tempo real (Canal P2P auxiliar)
   useEffect(() => {
     const unsubscribe = subscribeToCouple(
       appData.coupleCode,
@@ -145,7 +206,10 @@ export default function App() {
         }
       },
       (status) => {
-        setSyncStatus(status);
+        // Só atualiza se o status for positivo ou se o Supabase não estiver conectado
+        if (status.online) {
+          setSyncStatus(status);
+        }
       },
       (actionPayload) => {
         if (!actionPayload) return;

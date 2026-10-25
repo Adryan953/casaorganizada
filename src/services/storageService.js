@@ -16,6 +16,7 @@ import {
   normalizeUserId
 } from '../constants/initialData';
 import { generateWeeklySchedule } from './schedulerService';
+import { saveCoupleStateSupabase } from './supabaseService';
 
 const LOCAL_STORAGE_KEY = 'casa_em_paz_data_v1';
 const FIREBASE_CONFIG_KEY = 'casa_em_paz_firebase_cfg';
@@ -459,6 +460,11 @@ export async function syncSaveData(data, specificEvent = null) {
       senderId: getActiveUserId()
     });
   }
+
+  // Salva no banco de dados Supabase na nuvem (PostgreSQL)
+  saveCoupleStateSupabase(updatedData.coupleCode, updatedData).catch((err) => {
+    console.warn('Aviso ao sincronizar tarefas no Supabase:', err);
+  });
 
   // Opcional: Se houver Firebase configurado, salva lá também
   const database = initFirebase();

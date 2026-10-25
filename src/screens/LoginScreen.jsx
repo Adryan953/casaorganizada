@@ -6,25 +6,41 @@ export function LoginScreen({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+    setLoading(true);
 
-    const res = login(username, password);
-    if (res.success) {
-      onLoginSuccess(res.user);
-    } else {
-      setErrorMsg(res.message);
+    try {
+      const res = await login(username, password);
+      if (res.success) {
+        onLoginSuccess(res.user);
+      } else {
+        setErrorMsg(res.message);
+      }
+    } catch (err) {
+      setErrorMsg('Erro ao tentar conectar.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleQuickLogin = (user, pass) => {
+  const handleQuickLogin = async (user, pass) => {
     setUsername(user);
     setPassword(pass);
-    const res = login(user, pass);
-    if (res.success) {
-      onLoginSuccess(res.user);
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const res = await login(user, pass);
+      if (res.success) {
+        onLoginSuccess(res.user);
+      } else {
+        setErrorMsg(res.message);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

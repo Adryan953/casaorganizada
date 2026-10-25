@@ -532,7 +532,40 @@ export default function App() {
       updatedTasks = [...(appData.tasks || []), task];
     }
 
-    const updatedData = { ...appData, tasks: updatedTasks };
+    // Regera a agenda semanal para incluir a tarefa imediatamente nos dias certos
+    const result = generateWeeklySchedule({
+      tasks: updatedTasks,
+      availability: appData.availability,
+      users: coupleUsers,
+      history: appData.history,
+      targetRatio: appData.targetRatio || { user1: 50, user2: 50 }
+    });
+
+    // Preserva tarefas que já foram concluídas na semana
+    const completedMap = new Map();
+    (appData.weeklySchedule || []).forEach((item) => {
+      if (item.completed) {
+        completedMap.set(`${item.taskId}_${item.date}`, {
+          completed: true,
+          completedAt: item.completedAt
+        });
+      }
+    });
+
+    const newSchedule = result.schedule.map((item) => {
+      const done = completedMap.get(`${item.taskId}_${item.date}`);
+      if (done) {
+        return { ...item, completed: true, completedAt: done.completedAt };
+      }
+      return item;
+    });
+
+    const updatedData = {
+      ...appData,
+      tasks: updatedTasks,
+      weeklySchedule: newSchedule
+    };
+
     setAppData(updatedData);
     syncSaveData(updatedData);
   };

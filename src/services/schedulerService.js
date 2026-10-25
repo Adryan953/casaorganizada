@@ -95,6 +95,23 @@ export function generateWeeklySchedule({
         const weekNum = Math.floor(currentDate.getDate() / 7);
         return dayIndex === 6 && weekNum % 2 === 0;
       }
+      // Frequência Personalizada: de X em X dias
+      if (task.frequency === 'custom_interval' || task.frequency === 'every_x_days') {
+        const interval = Math.max(1, Number(task.customIntervalDays) || 3);
+        const baseDate = task.startDate ? new Date(task.startDate) : new Date(2026, 0, 1);
+        const curUtc = Date.UTC(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+        const baseUtc = Date.UTC(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+        const dayDiff = Math.round(Math.abs(curUtc - baseUtc) / (1000 * 60 * 60 * 24));
+        return dayDiff % interval === 0;
+      }
+      // Frequência Personalizada: dia específico do mês
+      if (task.frequency === 'monthly_day' || task.frequency === 'custom_month_day') {
+        const targetDay = Math.min(31, Math.max(1, Number(task.customMonthDay) || 1));
+        const dayOfMonth = currentDate.getDate();
+        const daysInCurrentMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+        const effectiveDay = Math.min(targetDay, daysInCurrentMonth);
+        return dayOfMonth === effectiveDay;
+      }
       return false;
     });
 

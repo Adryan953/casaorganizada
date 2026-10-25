@@ -51,7 +51,7 @@ export function LoginScreen({ onLoginSuccess }) {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        padding: '24px 20px',
+        padding: 'calc(var(--safe-top) + 20px) 20px calc(var(--safe-bottom) + 20px) 20px',
         backgroundColor: 'var(--bg-app)'
       }}
     >

@@ -16,7 +16,7 @@ export function AttentionAlarmModal({ alarmData, onStop }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '30px 20px env(safe-area-inset-bottom, 24px) 20px',
+        padding: 'calc(var(--safe-top) + 20px) 20px calc(var(--safe-bottom) + 20px) 20px',
         color: '#ffffff',
         textAlign: 'center',
         animation: 'fadeIn 0.3s ease-out'

@@ -216,3 +216,142 @@ export async function sendTestNotification(userName = 'Você') {
     tag: 'test-notification'
   });
 }
+
+/**
+ * Solicita permissão completa de notificações (Nativa do Android / Web / ServiceWorker)
+ */
+export async function requestFullAlarmPermissions() {
+  let webGranted = false;
+
+  // 1. Tenta Web Notification API / PWA / Android WebView
+  try {
+    if ('Notification' in window) {
+      const perm = await Notification.requestPermission();
+      webGranted = perm === 'granted';
+    }
+  } catch (e) {
+    console.warn('Erro ao solicitar Notification permission:', e);
+  }
+
+  // 2. Se ServiceWorker estiver presente, garante registro
+  if ('serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.ready;
+    } catch (e) {}
+  }
+
+  return {
+    granted: webGranted,
+    nativeGranted: webGranted,
+    webGranted
+  };
+}
+
+// Timer em memória para alarme agendado no app
+let scheduledAlarmTimeoutId = null;
+
+/**
+ * Dispara ou agenda notificação de alta prioridade com som de alarme contínuo e vibração forte.
+ * Acorda e chama a atenção no celular mesmo com o aplicativo fechado, em segundo plano ou tela bloqueada.
+ *
+ * @param {Object} alarmData
+ * @param {Date|null} scheduleAtDate - Se fornecido, agenda o disparo para esse momento (+20min pós vago)
+ */
+export async function triggerAttentionAlarmNotification(alarmData, scheduleAtDate = null) {
+  const fromName = alarmData?.fromUserName || 'Seu parceiro';
+  const title = `🚨 ATENÇÃO: Recado de ${fromName}!`;
+  const body = `${alarmData?.title || 'Recado Importante'}: Toque para abrir imediatamente e desligar o som!`;
+
+  // Se houver agendamento futuro (+20min)
+  if (scheduleAtDate && scheduleAtDate instanceof Date) {
+    const diffMs = scheduleAtDate.getTime() - Date.now();
+    if (diffMs > 1000) {
+      // Salva no localStorage como pendente/agendado
+      try {
+        localStorage.setItem(
+          'pending_attention_alarm',
+          JSON.stringify({
+            ...alarmData,
+            fromUserName: fromName,
+            scheduledFor: scheduleAtDate.toISOString(),
+            status: 'scheduled'
+          })
+        );
+      } catch (e) {}
+
+      // Limpa agendamento anterior se houver
+      if (scheduledAlarmTimeoutId) clearTimeout(scheduledAlarmTimeoutId);
+
+      scheduledAlarmTimeoutId = setTimeout(() => {
+        triggerAttentionAlarmNotification(alarmData, null);
+      }, diffMs);
+
+      console.log(`[Alarme] Agendado para disparar em ${Math.round(diffMs / 60000)} minutos (${scheduleAtDate.toLocaleTimeString()})`);
+      return true;
+    }
+  }
+
+  // DISPARO IMEDIATO / HORA CHEGOU
+  // 1. Persiste no localStorage como ativo
+  try {
+    localStorage.setItem(
+      'pending_attention_alarm',
+      JSON.stringify({
+        ...alarmData,
+        fromUserName: fromName,
+        triggeredAt: Date.now(),
+        status: 'active'
+      })
+    );
+  } catch (e) {}
+
+  // 2. Inicia o som de alarme contínuo em loop
+  try {
+    startAttentionAlarmLoop();
+  } catch (e) {
+    console.warn('Erro ao iniciar som contínuo:', e);
+  }
+
+  // 3. Disparo via ServiceWorker (acorda o celular bloqueado e exibe notificação de alta prioridade)
+  const options = {
+    body,
+    icon: '/icon.svg',
+    badge: '/favicon.svg',
+    tag: `attention_alarm_${alarmData?.id || Date.now()}`,
+    renotify: true,
+    requireInteraction: true,
+    silent: false,
+    vibrate: [600, 300, 600, 300, 600, 300, 1000, 500, 1000],
+    data: {
+      url: `/?alarm=1&id=${alarmData?.id || ''}`,
+      alarm: true,
+      alarmData: {
+        ...alarmData,
+        fromUserName: fromName
+      }
+    }
+  };
+
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, options);
+        return true;
+      }
+    } catch (e) {
+      console.warn('Erro via ServiceWorker:', e);
+    }
+  }
+
+  // 4. Fallback Notification API
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(title, options);
+      return true;
+    } catch (e) {}
+  }
+
+  return true;
+}
+

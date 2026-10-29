@@ -1,5 +1,5 @@
 // Service Worker para "Casa em Paz" PWA
-const CACHE_NAME = 'casa-em-paz-v1';
+const CACHE_NAME = 'casa-em-paz-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -79,16 +79,26 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const notifData = event.notification.data || {};
+  const targetUrl = notifData.url || '/';
+
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url === '/' && 'focus' in client) {
+        if ('focus' in client) {
+          if (notifData.alarm && notifData.alarmData) {
+            client.postMessage({
+              type: 'TRIGGER_ATTENTION_ALARM',
+              alarmData: notifData.alarmData
+            });
+          }
           return client.focus();
         }
       }
       if (clients.openWindow) {
-        return clients.openWindow('/');
+        return clients.openWindow(targetUrl);
       }
     })
   );
 });
+

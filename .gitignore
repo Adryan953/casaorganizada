@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary / Scratch
+screen_*.png
+scratch/
+*.zip
+*.idsig
+*.txt

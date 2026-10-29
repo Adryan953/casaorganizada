@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MessageSquareWarning,
   Camera,
@@ -11,11 +11,15 @@ import {
   HeartHandshake,
   Trash2,
   X,
-  Maximize2
+  Maximize2,
+  Folder,
+  RotateCcw,
+  Briefcase
 } from 'lucide-react';
 import { playChimeSound } from '../services/notificationService';
-import { isUserInWorkHours } from '../services/schedulerService';
+import { isUserInWorkHours, getWorkSchedule, isUserBusyOrAway } from '../services/schedulerService';
 import { normalizeUserId } from '../constants/initialData';
+import { InAppCamera } from '../components/InAppCamera';
 
 export function FeedbackScreen({
   activeUser,
@@ -25,8 +29,10 @@ export function FeedbackScreen({
   onCreateFeedback,
   onResolveFeedback,
   onCancelFeedback,
-  onTestAlarm
+  onTestAlarm,
+  onOpenAvailability
 }) {
+
   const [activeTab, setActiveTab] = useState('received'); // 'received' | 'sent' | 'new'
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -35,9 +41,60 @@ export function FeedbackScreen({
   const [notifyAfterWork, setNotifyAfterWork] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedImage, setExpandedImage] = useState(null);
+  const [showInAppCamera, setShowInAppCamera] = useState(false);
+  const fileInputRef = useRef(null);
 
   const otherUser = users.find((u) => normalizeUserId(u.id) !== activeUser.id) || users[1];
-  const isPartnerWorkingNow = isUserInWorkHours(availability, otherUser?.id);
+  const partnerBusyStatus = isUserBusyOrAway(availability, otherUser?.id, 20);
+  const isPartnerWorkingNow = partnerBusyStatus.isBusy;
+  const partnerWorkSchedule = getWorkSchedule(availability, otherUser?.id);
+
+  const DRAFT_KEY = `feedback_draft_${activeUser?.id || 'default'}`;
+
+  // Restaura rascunho salvo do formulário (evita perder texto se o app reiniciar ao escolher foto)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.title) setTitle(draft.title);
+        if (draft.description) setDescription(draft.description);
+        if (draft.severity) setSeverity(draft.severity);
+        if (draft.imageBase64) setImageBase64(draft.imageBase64);
+        if (draft.notifyAfterWork !== undefined) setNotifyAfterWork(draft.notifyAfterWork);
+      }
+    } catch (e) {}
+  }, [DRAFT_KEY]);
+
+  // Salva rascunho automaticamente
+  useEffect(() => {
+    try {
+      if (title || description || imageBase64) {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({
+            title,
+            description,
+            severity,
+            imageBase64,
+            notifyAfterWork,
+            updatedAt: Date.now()
+          })
+        );
+      }
+    } catch (e) {}
+  }, [title, description, severity, imageBase64, notifyAfterWork, DRAFT_KEY]);
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch (e) {}
+    setTitle('');
+    setDescription('');
+    setImageBase64(null);
+    setSeverity('gentle');
+    setNotifyAfterWork(false);
+  };
 
   // Reclamações que eu recebi do meu parceiro
   const receivedFeedbacks = feedbacks.filter((f) => normalizeUserId(f.toUserId) === activeUser.id);
@@ -87,7 +144,7 @@ export function FeedbackScreen({
 
     setIsSubmitting(true);
 
-    const shouldWaitAfterWork = notifyAfterWork && isPartnerWorkingNow;
+    const shouldWaitAfterBusy = notifyAfterWork && partnerBusyStatus.isBusy;
 
     const newFeedback = {
       id: `feedback_${Date.now()}`,
@@ -99,7 +156,10 @@ export function FeedbackScreen({
       severity,
       status: 'pending', // 'pending' | 'resolving' | 'resolved'
       notifyAfterWork: Boolean(notifyAfterWork),
-      delivered: !shouldWaitAfterWork,
+      delivered: !shouldWaitAfterBusy,
+      scheduledFor: shouldWaitAfterBusy && partnerBusyStatus.targetDate ? partnerBusyStatus.targetDate.toISOString() : null,
+      scheduledTimeStr: shouldWaitAfterBusy ? partnerBusyStatus.alarmTriggerTimeStr : null,
+      busyTitle: shouldWaitAfterBusy ? partnerBusyStatus.title : null,
       createdAt: new Date().toISOString(),
       responseNote: null,
       resolvedAt: null
@@ -115,10 +175,10 @@ export function FeedbackScreen({
     setIsSubmitting(false);
     setActiveTab('sent');
 
-    if (shouldWaitAfterWork) {
-      alert(`Desabafo guardado com carinho! Como ${otherUser.name} está trabalhando agora, a notificação e o alarme sonoro serão disparados assim que o expediente terminar para não atrapalhar o foco dela. 🕊️`);
+    if (shouldWaitAfterBusy) {
+      alert(`Desabafo guardado com muito carinho! 🕊️\n\nComo ${otherUser.name} está em: ${partnerBusyStatus.title} (até ${partnerBusyStatus.freeAt}), a notificação com som de alarme tocará no celular às ${partnerBusyStatus.alarmTriggerTimeStr} (exatamente 20 minutos após o horário vago/livre, dando tempo de chegar em casa com calma).`);
     } else {
-      alert(`Reclamação enviada com sucesso para ${otherUser.name}! Vai chegar no celular dela agora. 🕊️`);
+      alert(`Reclamação enviada com sucesso para ${otherUser.name}! Vai chamar a atenção no celular agora. 🕊️`);
     }
   };
 
@@ -296,69 +356,176 @@ export function FeedbackScreen({
               )}
             </div>
 
-            {/* UPLOAD / TIRAR FOTO */}
-            <div className="form-group" style={{ marginTop: '10px' }}>
-              <label className="form-label">Tirar Foto ou Escolher da Galeria (Opcional):</label>
+            {/* UPLOAD / CÂMERA PRÓPRIA DO APP / ESCOLHER ARQUIVO */}
+            <div className="form-group" style={{ marginTop: '12px' }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Foto do Incômodo (Opcional):</span>
+                {imageBase64 && (
+                  <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: '700' }}>
+                    ✓ Foto anexada com sucesso
+                  </span>
+                )}
+              </label>
+
+              {/* Input escondido para galeria tradicional */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleImageChange}
+              />
 
               {!imageBase64 ? (
-                <label
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    padding: '20px',
-                    border: '2px dashed var(--border-subtle)',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--bg-app)',
-                    cursor: 'pointer',
-                    transition: 'border-color 0.2s'
-                  }}
-                >
-                  <Camera size={26} color="var(--accent-rose)" />
-                  <span style={{ fontSize: '0.82rem', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                    Clique para Tirar Foto ou Anexar
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    style={{ display: 'none' }}
-                    onChange={handleImageChange}
-                  />
-                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                  {/* Botão 1: CÂMERA PRÓPRIA DO APP */}
+                  <button
+                    type="button"
+                    onClick={() => setShowInAppCamera(true)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '16px 12px',
+                      border: '2px solid var(--accent-rose)',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--accent-rose-light)',
+                      color: 'var(--accent-rose)',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <Camera size={26} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: '800' }}>
+                      📸 Câmera do App
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
+                      Tira foto sem sair do app
+                    </span>
+                  </button>
+
+                  {/* Botão 2: ESCOLHER ARQUIVO DA GALERIA */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '16px 12px',
+                      border: '2px dashed var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--bg-app)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <Folder size={26} color="var(--accent-primary)" />
+                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-primary)' }}>
+                      📁 Galeria / Arquivo
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                      Escolher foto salva
+                    </span>
+                  </button>
+                </div>
               ) : (
-                <div style={{ position: 'relative', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ position: 'relative', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '2px solid var(--accent-rose)' }}>
                   <img
                     src={imageBase64}
                     alt="Foto do incômodo"
                     style={{ width: '100%', maxHeight: '240px', objectFit: 'cover', display: 'block' }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setImageBase64(null)}
+
+                  {/* Barra de ações sobre a foto */}
+                  <div
                     style={{
                       position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      backgroundColor: 'rgba(15, 23, 42, 0.75)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '50%',
-                      width: '32px',
-                      height: '32px',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                      padding: '8px 12px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer'
+                      justifyContent: 'space-between'
                     }}
                   >
-                    <X size={18} />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedImage(imageBase64)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.75rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Maximize2 size={14} /> <span>Ver Grande</span>
+                    </button>
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowInAppCamera(true)}
+                        style={{
+                          background: 'rgba(255,255,255,0.15)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: 'white',
+                          padding: '4px 8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.72rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <RotateCcw size={12} /> <span>Trocar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageBase64(null)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.3)',
+                          border: '1px solid #ef4444',
+                          borderRadius: '6px',
+                          color: '#fca5a5',
+                          padding: '4px 8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.72rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Trash2 size={12} /> <span>Remover</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
+
+            {/* Modal da Câmera Interna do App */}
+            {showInAppCamera && (
+              <InAppCamera
+                onCapture={(compressedDataUrl) => {
+                  setImageBase64(compressedDataUrl);
+                  setShowInAppCamera(false);
+                }}
+                onClose={() => setShowInAppCamera(false)}
+              />
+            )}
 
             {/* Opção de Notificar Somente Fora do Horário de Trabalho */}
             <div
@@ -384,9 +551,14 @@ export function FeedbackScreen({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Clock size={18} color="var(--accent-primary)" />
-                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-primary)' }}>
-                    Notificar só quando {otherUser.name} sair do trabalho
-                  </span>
+                  <div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-primary)', display: 'block' }}>
+                      Notificar só quando {otherUser.name} estiver livre
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: '#8b5cf6', fontWeight: '700' }}>
+                      Dispara 20 minutos após o horário vago/saída
+                    </span>
+                  </div>
                 </div>
                 <input
                   type="checkbox"
@@ -396,26 +568,62 @@ export function FeedbackScreen({
                 />
               </label>
 
+              {/* Informações detalhadas do status configurado de otherUser */}
               <div
                 style={{
                   fontSize: '0.74rem',
                   color: isPartnerWorkingNow ? '#f59e0b' : 'var(--text-muted)',
-                  lineHeight: '1.4'
+                  lineHeight: '1.4',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  paddingTop: '6px',
+                  borderTop: '1px dashed var(--border-subtle)'
                 }}
               >
-                {isPartnerWorkingNow ? (
-                  <span>
-                    🟡 <strong>{otherUser.name} está em horário de trabalho agora.</strong> Se marcado, o aviso e o alarme sonoro só serão disparados no celular dela assim que o expediente terminar!
-                  </span>
+                {partnerBusyStatus.isBusy ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f59e0b', fontWeight: '800' }}>
+                      <span>{partnerBusyStatus.icon}</span>
+                      <span>{otherUser.name} está em: {partnerBusyStatus.title} (até {partnerBusyStatus.freeAt})</span>
+                    </div>
+                    <div style={{ padding: '6px 8px', borderRadius: '6px', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#b45309', fontSize: '0.73rem' }}>
+                      ⏳ <strong>Respiro de 20 Minutos:</strong> Se marcado, o alarme e som tocarão às <strong>{partnerBusyStatus.alarmTriggerTimeStr}</strong> (+20m após o horário vago), dando tempo para chegar em casa com tranquilidade!
+                    </div>
+                  </>
                 ) : (
-                  <span>
-                    🟢 <strong>{otherUser.name} está fora do horário de trabalho no momento.</strong> O aviso chegará de imediato.
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontWeight: '700' }}>
+                    <span>🟢</span>
+                    <span>{otherUser.name} está livre no momento. O aviso e o alarme sonoro chegarão de imediato.</span>
+                  </div>
+                )}
+
+                {onOpenAvailability && (
+                  <button
+                    type="button"
+                    onClick={onOpenAvailability}
+                    style={{
+                      marginTop: '6px',
+                      alignSelf: 'flex-start',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent-primary)',
+                      fontSize: '0.74rem',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      padding: 0,
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    ⚙️ Ajustar horários de trabalho e fora de casa de {otherUser.name}
+                  </button>
                 )}
               </div>
             </div>
 
-            <div style={{ marginTop: '18px' }}>
+
+            {/* Botões de Ação: Enviar e Cancelar Desabafo */}
+            <div style={{ marginTop: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button
                 type="submit"
                 className="btn btn-primary btn-action-large"
@@ -425,10 +633,40 @@ export function FeedbackScreen({
                 <Send size={18} />
                 <span>{isSubmitting ? 'Enviando ao celular...' : `Enviar Reclamação para ${otherUser.name}`}</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (title.trim() || description.trim() || imageBase64) {
+                    if (!confirm('Deseja cancelar e limpar este desabafo?')) return;
+                  }
+                  clearDraft();
+                  setActiveTab('received');
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <X size={16} />
+                <span>Cancelar Desabafo</span>
+              </button>
             </div>
           </form>
         </div>
       )}
+
 
       {/* ABA 2: RECLAMAÇÕES RECEBIDAS DO PARCEIRO */}
       {activeTab === 'received' && (

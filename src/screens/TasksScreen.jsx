@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   Pencil,
@@ -12,9 +12,13 @@ import {
   Check,
   AlertCircle,
   Calendar,
-  Repeat
+  Repeat,
+  Home,
+  CalendarDays,
+  ListFilter,
+  User
 } from 'lucide-react';
-import { CATEGORIES } from '../constants/initialData';
+import { CATEGORIES, DAYS_OF_WEEK, normalizeUserId } from '../constants/initialData';
 
 export function getFrequencyLabel(task) {
   if (!task) return '';
@@ -23,6 +27,11 @@ export function getFrequencyLabel(task) {
   if (task.frequency === '2x_week') return '2x por semana';
   if (task.frequency === '1x_week') return '1x por semana';
   if (task.frequency === 'every_15_days') return 'A cada 15 dias';
+  if (task.frequency === 'once' || task.frequency === 'specific_date' || task.frequency === 'custom_date') {
+    if (!task.specificDate) return '📅 Uma única vez';
+    const [year, month, day] = task.specificDate.split('-');
+    return `📅 Uma vez em ${day}/${month}/${year}`;
+  }
   if (task.frequency === 'custom_interval') {
     return `A cada ${task.customIntervalDays || 3} dias`;
   }
@@ -32,10 +41,22 @@ export function getFrequencyLabel(task) {
   return 'Personalizada';
 }
 
-export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }) {
+export function TasksScreen({
+  tasks = [],
+  users = [],
+  schedule = [],
+  availability = {},
+  onSaveTask,
+  onDeleteTask
+}) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [viewMode, setViewMode] = useState('day'); // 'day' | 'category'
+  const [selectedDayTab, setSelectedDayTab] = useState(() => new Date().getDay()); // 0..6 ou 'all'
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+
+  // Helper para obter a data de hoje no formato YYYY-MM-DD
+  const getTodayDateStr = () => new Date().toISOString().split('T')[0];
 
   // Estado do formulário
   const [formData, setFormData] = useState({
@@ -43,6 +64,7 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
     title: '',
     category: 'limpeza',
     frequency: 'daily',
+    specificDate: getTodayDateStr(),
     customIntervalDays: 3,
     customMonthDay: 5,
     preferredTime: '09:00',
@@ -55,17 +77,19 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
   const openNewTaskModal = () => {
     setEditingTask(null);
     setFormData({
-      id: `task_${Date.now()}`,
+      id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       title: '',
       category: 'limpeza',
       frequency: 'daily',
+      specificDate: getTodayDateStr(),
       customIntervalDays: 3,
       customMonthDay: 5,
       preferredTime: '09:00',
       durationMinutes: 20,
       effortLevel: 2,
       overloadsUsers: [],
-      description: ''
+      description: '',
+      createdAt: new Date().toISOString()
     });
     setIsModalOpen(true);
   };
@@ -77,6 +101,7 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
       title: task.title,
       category: task.category || 'limpeza',
       frequency: task.frequency || 'daily',
+      specificDate: task.specificDate || getTodayDateStr(),
       customIntervalDays: task.customIntervalDays || 3,
       customMonthDay: task.customMonthDay || 5,
       preferredTime: task.preferredTime || '09:00',
@@ -107,8 +132,13 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
       return;
     }
 
+    const isOnce = formData.frequency === 'once' || formData.frequency === 'specific_date' || formData.frequency === 'custom_date';
+
     onSaveTask({
       ...formData,
+      specificDate: isOnce
+        ? (formData.specificDate || getTodayDateStr())
+        : undefined,
       customIntervalDays: formData.frequency === 'custom_interval'
         ? Math.max(1, Number(formData.customIntervalDays) || 3)
         : undefined,
@@ -122,10 +152,81 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
     setIsModalOpen(false);
   };
 
-  const filteredTasks = tasks.filter((t) => {
-    if (selectedCategoryFilter === 'all') return true;
-    return t.category === selectedCategoryFilter;
-  });
+  // Desduplicar e ordenar tasks de forma estável com useMemo para evitar re-renders desnecessários
+  const uniqueTasks = useMemo(() => {
+    const map = new Map();
+    (tasks || []).forEach((t) => {
+      if (t && t.id) map.set(t.id, t);
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      // Ordena por data de criação (mais antigas primeiro) e por id como desempate
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (timeA !== timeB) return timeA - timeB;
+      return String(a.id).localeCompare(String(b.id));
+    });
+  }, [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    return uniqueTasks.filter((t) => {
+      if (selectedCategoryFilter === 'all') return true;
+      return t.category === selectedCategoryFilter;
+    });
+  }, [uniqueTasks, selectedCategoryFilter]);
+  // Mapeamento e agrupamento de tarefas por dia da semana
+  const tasksByDay = useMemo(() => {
+    return (DAYS_OF_WEEK || []).map((dayDef) => {
+      const dayIdx = dayDef.index;
+
+      // 1. Instâncias da agenda semanal calculadas com horários em casa e divisão justa
+      const scheduledForDay = (schedule || [])
+        .filter((item) => item.dayOfWeek === dayIdx)
+        .sort((a, b) => {
+          const timeA = a.preferredTime || '09:00';
+          const timeB = b.preferredTime || '09:00';
+          const timeCmp = timeA.localeCompare(timeB);
+          if (timeCmp !== 0) return timeCmp;
+          return String(a.taskId || a.instanceId || '').localeCompare(String(b.taskId || b.instanceId || ''));
+        });
+
+      if (scheduledForDay.length > 0) {
+        const totalMinutes = scheduledForDay.reduce((acc, t) => acc + (t.durationMinutes || 0), 0);
+        const totalPoints = scheduledForDay.reduce((acc, t) => acc + (t.points || 0), 0);
+        return {
+          ...dayDef,
+          tasks: scheduledForDay,
+          totalMinutes,
+          totalPoints
+        };
+      }
+
+      // Fallback a partir do cadastro direto de tarefas
+      const matchingTasks = uniqueTasks.filter((t) => {
+        if (t.frequency === 'daily') return true;
+        if (t.frequency === 'every_2_days') return dayIdx % 2 === 0;
+        if (t.frequency === '2x_week') return (t.preferredDays || [2, 5]).includes(dayIdx);
+        if (t.frequency === '1x_week') return (t.preferredDays || [6]).includes(dayIdx);
+        if (t.frequency === 'every_15_days') return dayIdx === 6;
+        return false;
+      });
+
+      const totalMinutes = matchingTasks.reduce((acc, t) => acc + (t.durationMinutes || 0), 0);
+      const totalPoints = matchingTasks.reduce((acc, t) => acc + ((t.durationMinutes || 0) * (t.effortLevel || 1)), 0);
+
+      return {
+        ...dayDef,
+        tasks: matchingTasks,
+        totalMinutes,
+        totalPoints
+      };
+    });
+  }, [schedule, uniqueTasks]);
+
+  // Dias a serem exibidos de acordo com a aba selecionada (ou todos)
+  const displayedDays = useMemo(() => {
+    if (selectedDayTab === 'all') return tasksByDay;
+    return tasksByDay.filter((d) => d.index === Number(selectedDayTab));
+  }, [tasksByDay, selectedDayTab]);
 
   return (
     <div>
@@ -134,7 +235,7 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
         <div>
           <h2 style={{ fontSize: '1.2rem', fontWeight: '700' }}>Tarefas da Casa</h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            {tasks.length} tarefas cadastradas na rotina
+            {uniqueTasks.length} tarefas cadastradas na rotina
           </p>
         </div>
         <button
@@ -148,153 +249,398 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
         </button>
       </div>
 
-      {/* Filtro por Categoria */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '6px',
-          overflowX: 'auto',
-          paddingBottom: '10px',
-          marginBottom: '12px'
-        }}
-      >
+      {/* SELETOR DE MODO DE VISUALIZAÇÃO: POR DIA DA SEMANA OU POR CATEGORIA */}
+      <div className="tabs-pill-container" style={{ marginBottom: '14px' }}>
         <button
-          className={`tab-pill ${selectedCategoryFilter === 'all' ? 'active' : ''}`}
-          style={{ whiteSpace: 'nowrap', padding: '6px 12px', fontSize: '0.8rem' }}
-          onClick={() => setSelectedCategoryFilter('all')}
+          className={`tab-pill ${viewMode === 'day' ? 'active' : ''}`}
+          onClick={() => setViewMode('day')}
         >
-          Todas ({tasks.length})
+          <CalendarDays size={15} />
+          <span>Por Dia da Semana</span>
         </button>
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.id}
-            className={`tab-pill ${selectedCategoryFilter === cat.id ? 'active' : ''}`}
-            style={{ whiteSpace: 'nowrap', padding: '6px 12px', fontSize: '0.8rem' }}
-            onClick={() => setSelectedCategoryFilter(cat.id)}
-          >
-            <span>{cat.icon}</span>
-            <span>{cat.label}</span>
-          </button>
-        ))}
+
+        <button
+          className={`tab-pill ${viewMode === 'category' ? 'active' : ''}`}
+          onClick={() => setViewMode('category')}
+        >
+          <ListFilter size={15} />
+          <span>Por Categoria</span>
+        </button>
       </div>
 
-      {/* Lista de Tarefas */}
-      {filteredTasks.map((task) => {
-        const cat = CATEGORIES.find((c) => c.id === task.category) || { label: 'Geral', icon: '🧹' };
-        const points = (task.durationMinutes || 0) * (task.effortLevel || 1);
-
-        return (
-          <div key={task.id} className="card" style={{ marginBottom: '10px', padding: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                  <span className="task-category-badge">
-                    <span>{cat.icon}</span>
-                    <span>{cat.label}</span>
-                  </span>
-
-                  <span className={`task-effort-badge effort-${task.effortLevel}`}>
-                    {task.effortLevel === 1 && <Sprout size={12} />}
-                    {task.effortLevel === 2 && <Zap size={12} />}
-                    {task.effortLevel === 3 && <Flame size={12} />}
-                    <span>{task.effortLevel === 1 ? 'Leve (1x)' : task.effortLevel === 2 ? 'Médio (2x)' : 'Pesado (3x)'}</span>
-                  </span>
-                </div>
-
-                <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-primary)', marginTop: '4px' }}>
-                  {task.title}
-                </h3>
-
-                {task.description && (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {task.description}
-                  </p>
-                )}
-
-                {/* Sobrecargas */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
-                  {users.map((u) => {
-                    const isOverloaded = (task.overloadsUsers || []).includes(u.id);
-                    if (!isOverloaded) return null;
-                    return (
-                      <span
-                        key={u.id}
-                        className="overload-tag"
-                        style={{ fontSize: '0.7rem' }}
-                      >
-                        <Heart size={11} />
-                        <span>Sobrecarrega {u.name} (prioridade de alívio)</span>
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Ações de Edição e Exclusão */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <button
-                  className="btn-icon-subtle"
-                  onClick={() => openEditModal(task)}
-                  title="Editar tarefa"
-                >
-                  <Pencil size={17} />
-                </button>
-                <button
-                  className="btn-icon-subtle"
-                  style={{ color: 'var(--text-muted)' }}
-                  onClick={() => {
-                    if (confirm(`Deseja remover "${task.title}" da lista de tarefas?`)) {
-                      onDeleteTask(task.id);
-                    }
-                  }}
-                  title="Excluir tarefa"
-                >
-                  <Trash2 size={17} />
-                </button>
-              </div>
-            </div>
-
-            {/* Rodapé do Card com tempo, frequência e esforço */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                borderTop: '1px solid var(--border-subtle)',
-                marginTop: '10px',
-                paddingTop: '8px',
-                fontSize: '0.78rem',
-                color: 'var(--text-muted)',
-                flexWrap: 'wrap',
-                gap: '4px'
-              }}
+      {/* VISUALIZAÇÃO 1: ORGANIZADA POR DIA DA SEMANA */}
+      {viewMode === 'day' && (
+        <div>
+          {/* Seletor de Dias da Semana (Dom, Seg, Ter... ou Todos) */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '6px',
+              overflowX: 'auto',
+              paddingBottom: '10px',
+              marginBottom: '14px'
+            }}
+          >
+            <button
+              className={`tab-pill ${selectedDayTab === 'all' ? 'active' : ''}`}
+              style={{ whiteSpace: 'nowrap', padding: '6px 12px', fontSize: '0.8rem' }}
+              onClick={() => setSelectedDayTab('all')}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <Clock size={13} />
-                <span>{task.durationMinutes} min</span>
-                <span>•</span>
-                <span>{task.preferredTime}</span>
-                <span>•</span>
-                <span
+              Todos os Dias
+            </button>
+            {DAYS_OF_WEEK.map((d) => {
+              const isToday = d.index === new Date().getDay();
+              const isSelected = selectedDayTab === d.index;
+              const dayTasksCount = tasksByDay.find((td) => td.index === d.index)?.tasks.length || 0;
+
+              return (
+                <button
+                  key={d.index}
+                  className={`tab-pill ${isSelected ? 'active' : ''}`}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', fontSize: '0.8rem' }}
+                  onClick={() => setSelectedDayTab(d.index)}
+                >
+                  <span>{d.short}</span>
+                  <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>({dayTasksCount})</span>
+                  {isToday && <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: 'var(--accent-primary)', marginLeft: '2px' }} />}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Cards agrupados por dia */}
+          {displayedDays.map((dayGroup) => {
+            const isToday = dayGroup.index === new Date().getDay();
+
+            return (
+              <div key={dayGroup.index} style={{ marginBottom: '22px' }}>
+                {/* Cabeçalho do Dia */}
+                <div
                   style={{
-                    backgroundColor: 'var(--accent-primary-light)',
-                    color: 'var(--accent-primary)',
-                    padding: '2px 6px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontWeight: '700',
-                    fontSize: '0.72rem'
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '10px',
+                    padding: '6px 4px',
+                    borderBottom: '1px solid var(--border-subtle)'
                   }}
                 >
-                  {getFrequencyLabel(task)}
-                </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.05rem', fontWeight: '700', color: isToday ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
+                      {dayGroup.label}
+                    </span>
+                    {isToday && (
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: '800',
+                          backgroundColor: 'var(--accent-primary-light)',
+                          color: 'var(--accent-primary)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-full)'
+                        }}
+                      >
+                        Hoje
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {dayGroup.tasks.length} {dayGroup.tasks.length === 1 ? 'tarefa' : 'tarefas'} • {dayGroup.totalMinutes} min totais
+                  </div>
+                </div>
+
+                {/* Lista de tarefas do dia */}
+                {dayGroup.tasks.length === 0 ? (
+                  <div className="card" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    Nenhuma tarefa agendada para {dayGroup.label.toLowerCase()}. Dia de descanso! ☕
+                  </div>
+                ) : (
+                  dayGroup.tasks.map((taskItem) => {
+                    // Localiza a tarefa original para editar ou excluir
+                    const originalTask = uniqueTasks.find((t) => t.id === (taskItem.taskId || taskItem.id)) || taskItem;
+                    const cat = CATEGORIES.find((c) => c.id === taskItem.category) || { label: 'Geral', icon: '🧹' };
+                    const assignedPerson = users.find((u) => u.id === taskItem.assignedTo);
+
+                    return (
+                      <div key={taskItem.instanceId || `${taskItem.id}_${dayGroup.index}`} className="card" style={{ marginBottom: '10px', padding: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                              <span className="task-category-badge">
+                                <span>{cat.icon}</span>
+                                <span>{cat.label}</span>
+                              </span>
+
+                              <span className={`task-effort-badge effort-${taskItem.effortLevel}`}>
+                                {taskItem.effortLevel === 1 && <Sprout size={12} />}
+                                {taskItem.effortLevel === 2 && <Zap size={12} />}
+                                {taskItem.effortLevel === 3 && <Flame size={12} />}
+                                <span>{taskItem.effortLevel === 1 ? 'Leve' : taskItem.effortLevel === 2 ? 'Médio' : 'Pesado'}</span>
+                              </span>
+
+                              {/* Indicação de Horário em Casa */}
+                              <span
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: 'var(--radius-full)',
+                                  fontSize: '0.68rem',
+                                  fontWeight: '700',
+                                  backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                                  color: 'var(--accent-primary)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Home size={11} />
+                                <span>Disponível às {taskItem.preferredTime} (em casa)</span>
+                              </span>
+                            </div>
+
+                            <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-primary)', marginTop: '4px' }}>
+                              {taskItem.title}
+                            </h3>
+
+                            {taskItem.description && (
+                              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                {taskItem.description}
+                              </p>
+                            )}
+
+                            {/* Responsável pela tarefa neste dia */}
+                            {assignedPerson && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Responsável:</span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: '600' }}>
+                                  <span>{assignedPerson.avatar}</span>
+                                  <span>{assignedPerson.name}</span>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Ações de Edição e Exclusão */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <button
+                              className="btn-icon-subtle"
+                              onClick={() => openEditModal(originalTask)}
+                              title="Editar tarefa"
+                            >
+                              <Pencil size={17} />
+                            </button>
+                            <button
+                              className="btn-icon-subtle"
+                              style={{ color: 'var(--text-muted)' }}
+                              onClick={() => {
+                                if (confirm(`Deseja remover "${originalTask.title}" da lista de tarefas?`)) {
+                                  onDeleteTask(originalTask.id);
+                                }
+                              }}
+                              title="Excluir tarefa"
+                            >
+                              <Trash2 size={17} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Rodapé com detalhes de duração e frequência */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            borderTop: '1px solid var(--border-subtle)',
+                            marginTop: '10px',
+                            paddingTop: '8px',
+                            fontSize: '0.78rem',
+                            color: 'var(--text-muted)',
+                            flexWrap: 'wrap',
+                            gap: '4px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <Clock size={13} />
+                            <span>{taskItem.durationMinutes} min</span>
+                            <span>•</span>
+                            <span
+                              style={{
+                                backgroundColor: 'var(--accent-primary-light)',
+                                color: 'var(--accent-primary)',
+                                padding: '2px 6px',
+                                borderRadius: 'var(--radius-sm)',
+                                fontWeight: '700',
+                                fontSize: '0.72rem'
+                              }}
+                            >
+                              {getFrequencyLabel(originalTask)}
+                            </span>
+                          </div>
+                          <strong style={{ color: 'var(--text-primary)' }}>
+                            {(taskItem.durationMinutes || 0) * (taskItem.effortLevel || 1)} pts
+                          </strong>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-              <strong style={{ color: 'var(--text-primary)' }}>
-                {points} pts de esforço
-              </strong>
-            </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* VISUALIZAÇÃO 2: POR CATEGORIA (LISTA TRADICIONAL) */}
+      {viewMode === 'category' && (
+        <div>
+          {/* Filtro por Categoria */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '6px',
+              overflowX: 'auto',
+              paddingBottom: '10px',
+              marginBottom: '12px'
+            }}
+          >
+            <button
+              className={`tab-pill ${selectedCategoryFilter === 'all' ? 'active' : ''}`}
+              style={{ whiteSpace: 'nowrap', padding: '6px 12px', fontSize: '0.8rem' }}
+              onClick={() => setSelectedCategoryFilter('all')}
+            >
+              Todas ({uniqueTasks.length})
+            </button>
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                className={`tab-pill ${selectedCategoryFilter === cat.id ? 'active' : ''}`}
+                style={{ whiteSpace: 'nowrap', padding: '6px 12px', fontSize: '0.8rem' }}
+                onClick={() => setSelectedCategoryFilter(cat.id)}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.label}</span>
+              </button>
+            ))}
           </div>
-        );
-      })}
+
+          {/* Lista de Tarefas por Categoria */}
+          {filteredTasks.map((task) => {
+            const cat = CATEGORIES.find((c) => c.id === task.category) || { label: 'Geral', icon: '🧹' };
+            const points = (task.durationMinutes || 0) * (task.effortLevel || 1);
+
+            return (
+              <div key={task.id} className="card" style={{ marginBottom: '10px', padding: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                      <span className="task-category-badge">
+                        <span>{cat.icon}</span>
+                        <span>{cat.label}</span>
+                      </span>
+
+                      <span className={`task-effort-badge effort-${task.effortLevel}`}>
+                        {task.effortLevel === 1 && <Sprout size={12} />}
+                        {task.effortLevel === 2 && <Zap size={12} />}
+                        {task.effortLevel === 3 && <Flame size={12} />}
+                        <span>{task.effortLevel === 1 ? 'Leve (1x)' : task.effortLevel === 2 ? 'Médio (2x)' : 'Pesado (3x)'}</span>
+                      </span>
+                    </div>
+
+                    <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-primary)', marginTop: '4px' }}>
+                      {task.title}
+                    </h3>
+
+                    {task.description && (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {task.description}
+                      </p>
+                    )}
+
+                    {/* Sobrecargas */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                      {users.map((u) => {
+                        const isOverloaded = (task.overloadsUsers || []).includes(u.id);
+                        if (!isOverloaded) return null;
+                        return (
+                          <span
+                            key={u.id}
+                            className="overload-tag"
+                            style={{ fontSize: '0.7rem' }}
+                          >
+                            <Heart size={11} />
+                            <span>Sobrecarrega {u.name} (prioridade de alívio)</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Ações de Edição e Exclusão */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      className="btn-icon-subtle"
+                      onClick={() => openEditModal(task)}
+                      title="Editar tarefa"
+                    >
+                      <Pencil size={17} />
+                    </button>
+                    <button
+                      className="btn-icon-subtle"
+                      style={{ color: 'var(--text-muted)' }}
+                      onClick={() => {
+                        if (confirm(`Deseja remover "${task.title}" da lista de tarefas?`)) {
+                          onDeleteTask(task.id);
+                        }
+                      }}
+                      title="Excluir tarefa"
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Rodapé do Card com tempo, frequência e esforço */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderTop: '1px solid var(--border-subtle)',
+                    marginTop: '10px',
+                    paddingTop: '8px',
+                    fontSize: '0.78rem',
+                    color: 'var(--text-muted)',
+                    flexWrap: 'wrap',
+                    gap: '4px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <Clock size={13} />
+                    <span>{task.durationMinutes} min</span>
+                    <span>•</span>
+                    <span>{task.preferredTime}</span>
+                    <span>•</span>
+                    <span
+                      style={{
+                        backgroundColor: 'var(--accent-primary-light)',
+                        color: 'var(--accent-primary)',
+                        padding: '2px 6px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontWeight: '700',
+                        fontSize: '0.72rem'
+                      }}
+                    >
+                      {getFrequencyLabel(task)}
+                    </span>
+                  </div>
+                  <strong style={{ color: 'var(--text-primary)' }}>
+                    {points} pts de esforço
+                  </strong>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Modal / Bottom Sheet para Adicionar ou Editar Tarefa */}
       {isModalOpen && (
@@ -351,11 +697,131 @@ export function TasksScreen({ tasks = [], users = [], onSaveTask, onDeleteTask }
                     <option value="2x_week">2x por semana</option>
                     <option value="1x_week">1x por semana</option>
                     <option value="every_15_days">A cada 15 dias</option>
-                    <option value="custom_interval">⚙️ Personalizado: De X em X dias</option>
-                    <option value="monthly_day">📅 Personalizado: Dia específico do mês</option>
+                    <option value="once">📅 Uma única vez (Escolher data no calendário)</option>
+                    <option value="custom_interval">⚙️ Personalizado: De X em X dias (Recorrente)</option>
+                    <option value="monthly_day">🗓️ Personalizado: Dia específico do mês (Recorrente)</option>
                   </select>
                 </div>
               </div>
+
+              {/* OPÇÃO PERSONALIZADA: Data específica no Calendário (Uma única vez - não recorrente) */}
+              {(formData.frequency === 'once' || formData.frequency === 'specific_date' || formData.frequency === 'custom_date') && (
+                <div
+                  style={{
+                    marginBottom: '14px',
+                    padding: '14px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-app)',
+                    border: '2px solid #6366f1',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '800', fontSize: '0.88rem', color: '#6366f1' }}>
+                      <Calendar size={18} />
+                      <span>Escolha o Dia no Calendário:</span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: '800',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-full)',
+                        backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                        color: '#6366f1'
+                      }}
+                    >
+                      ✨ Apenas 1 Vez
+                    </span>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.74rem', fontWeight: '700', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Data Selecionada:
+                    </label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={formData.specificDate || getTodayDateStr()}
+                      onChange={(e) => setFormData({ ...formData, specificDate: e.target.value })}
+                      required
+                      style={{
+                        fontWeight: '800',
+                        fontSize: '1rem',
+                        padding: '10px',
+                        color: 'var(--text-primary)',
+                        borderColor: '#6366f1'
+                      }}
+                    />
+                  </div>
+
+                  {/* Atalhos Rápidos de Datas */}
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '5px' }}>
+                      Atalhos Rápidos de Datas:
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {[
+                        { label: '📌 Hoje', days: 0 },
+                        { label: '🌅 Amanhã', days: 1 },
+                        { label: '⏩ Depois de amanhã', days: 2 },
+                        { label: '🗓️ Sábado', targetDay: 6 },
+                        { label: '🗓️ Domingo', targetDay: 0 }
+                      ].map((item, idx) => {
+                        let dateStr = '';
+                        if (item.days !== undefined) {
+                          const d = new Date();
+                          d.setDate(d.getDate() + item.days);
+                          const y = d.getFullYear();
+                          const m = String(d.getMonth() + 1).padStart(2, '0');
+                          const day = String(d.getDate()).padStart(2, '0');
+                          dateStr = `${y}-${m}-${day}`;
+                        } else if (item.targetDay !== undefined) {
+                          const d = new Date();
+                          const cur = d.getDay();
+                          let diff = item.targetDay - cur;
+                          if (diff <= 0) diff += 7;
+                          d.setDate(d.getDate() + diff);
+                          const y = d.getFullYear();
+                          const m = String(d.getMonth() + 1).padStart(2, '0');
+                          const day = String(d.getDate()).padStart(2, '0');
+                          dateStr = `${y}-${m}-${day}`;
+                        }
+                        const isSelected = formData.specificDate === dateStr;
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, specificDate: dateStr })}
+                            style={{
+                              fontSize: '0.72rem',
+                              padding: '4px 8px',
+                              borderRadius: 'var(--radius-sm)',
+                              border: isSelected ? '1.5px solid #6366f1' : '1px solid var(--border-subtle)',
+                              backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-card)',
+                              color: isSelected ? '#6366f1' : 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              fontWeight: '700'
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', margin: '4px 0 0', lineHeight: '1.4' }}>
+                    💡 <strong>Não recorrente:</strong> Esta tarefa aparecerá exclusivamente no dia selecionado ({(() => {
+                      if (!formData.specificDate) return '';
+                      const [y, m, d] = formData.specificDate.split('-');
+                      return `${d}/${m}/${y}`;
+                    })()}). Ao ser concluída, não voltará a se repetir automaticamente.
+                  </p>
+                </div>
+              )}
 
               {/* OPÇÃO PERSONALIZADA 1: De X em X dias */}
               {formData.frequency === 'custom_interval' && (

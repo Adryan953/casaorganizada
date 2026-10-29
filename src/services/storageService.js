@@ -17,6 +17,7 @@ import {
 } from '../constants/initialData';
 import { generateWeeklySchedule } from './schedulerService';
 import { saveCoupleStateSupabase } from './supabaseService';
+import { mergeAppState } from './stateMergeService';
 
 const LOCAL_STORAGE_KEY = 'casa_em_paz_data_v1';
 const FIREBASE_CONFIG_KEY = 'casa_em_paz_firebase_cfg';
@@ -92,52 +93,22 @@ export function initFirebase(config = null) {
   }
 }
 
-// Carrega os dados locais do aparelho
+// Carrega os dados locais do aparelho com fusão profunda e segura
 export function loadLocalData() {
+  const defaultData = getDefaultAppState();
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.tasks && parsed.users) {
-        // Garante que haja um coupleCode válido
-        if (!parsed.coupleCode) {
-          parsed.coupleCode = DEFAULT_COUPLE_CODE;
-        }
-
-        // Garante que a lista de usuários contenha os dois perfis oficiais com IDs limpos
-        parsed.users = DEFAULT_USERS.map((def) => {
-          const existing = (parsed.users || []).find((u) => normalizeUserId(u.id || u.username) === def.id);
-          return existing ? { ...def, name: existing.name || def.name } : def;
-        });
-
-        // Migra tarefas com IDs legados ('user1' -> 'adryan', 'user2' -> 'kah')
-        if (Array.isArray(parsed.weeklySchedule)) {
-          parsed.weeklySchedule = parsed.weeklySchedule.map((t) => ({
-            ...t,
-            assignedTo: normalizeUserId(t.assignedTo)
-          }));
-        }
-
-        // Migra disponibilidade se estiver usando chaves antigas
-        if (parsed.availability) {
-          const avail = {};
-          if (parsed.availability.adryan || parsed.availability.user1) {
-            avail.adryan = parsed.availability.adryan || parsed.availability.user1;
-          }
-          if (parsed.availability.kah || parsed.availability.user2) {
-            avail.kah = parsed.availability.kah || parsed.availability.user2;
-          }
-          parsed.availability = { ...INITIAL_AVAILABILITY, ...avail };
-        }
-
-        return parsed;
+      if (parsed && typeof parsed === 'object') {
+        const merged = mergeAppState(defaultData, parsed);
+        return merged;
       }
     }
   } catch (e) {
     console.error('Erro ao ler localStorage:', e);
   }
 
-  const defaultData = getDefaultAppState();
   saveLocalData(defaultData);
   return defaultData;
 }
@@ -216,20 +187,32 @@ export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange
     onSyncStatusChange({ online: true, reason: 'connecting', mode: 'realtime' });
   }
 
+  const processedMessageIds = new Set();
+
   // 2. Função para processar mensagens recebidas do parceiro
   const handleIncomingMessage = (rawMessage) => {
     try {
       const payload = typeof rawMessage === 'string' ? JSON.parse(rawMessage) : rawMessage;
       if (!payload || !payload.type) return;
 
-      const current = loadLocalData();
+      const activeUser = normalizeUserId(getActiveUserId());
+      const sender = payload.senderId ? normalizeUserId(payload.senderId) : null;
 
-      // Ignora se for eco da própria alteração se houver id do cliente
-      const activeUser = getActiveUserId();
-      if (payload.senderId && normalizeUserId(payload.senderId) === activeUser && payload.type !== 'REQUEST_FULL_STATE') {
+      // Ignora terminantemente se for mensagem gerada por este mesmo dispositivo/usuário
+      if (sender && sender === activeUser) {
         return;
       }
 
+      // Evita reprocessar mensagens duplicadas em loop
+      const msgKey = `${payload.type}_${payload.senderId || ''}_${payload.clientTimestamp || ''}_${payload.instanceId || ''}`;
+      if (processedMessageIds.has(msgKey)) return;
+      processedMessageIds.add(msgKey);
+      if (processedMessageIds.size > 200) {
+        const first = processedMessageIds.values().next().value;
+        processedMessageIds.delete(first);
+      }
+
+      const current = loadLocalData();
       let updated = { ...current };
 
       if (payload.type === 'TASK_STATUS') {
@@ -297,13 +280,9 @@ export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange
       } else if (payload.type === 'FEEDBACK_CANCEL') {
         updated.feedbacks = (current.feedbacks || []).filter((f) => f.id !== payload.feedbackId);
       } else if (payload.type === 'FULL_STATE_UPDATE') {
-        // Atualização completa recebida
-        if (payload.data && payload.data.updatedAt) {
-          const currentTimestamp = new Date(current.updatedAt || 0).getTime();
-          const remoteTimestamp = new Date(payload.data.updatedAt).getTime();
-          if (remoteTimestamp >= currentTimestamp) {
-            updated = { ...payload.data, coupleCode: current.coupleCode };
-          }
+        // Atualização completa recebida com mesclagem inteligente
+        if (payload.data) {
+          updated = mergeAppState(current, payload.data);
         }
       } else if (payload.type === 'REQUEST_FULL_STATE') {
         // O parceiro acabou de entrar e pediu o estado mais recente
@@ -380,11 +359,12 @@ export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange
 
   connectWebSocket();
 
-  // 4. Polling de verificação periódica a cada 4 segundos como segurança extra
+  // 4. Polling de verificação periódica apenas como fallback se o WebSocket estiver desconectado
   const checkPollMessages = async () => {
     if (isClosed) return;
+    if (ws && ws.readyState === WebSocket.OPEN) return; // Não faz polling se o WebSocket já estiver recebendo mensagens em tempo real
     try {
-      const resp = await fetch(`https://ntfy.sh/${topic}/json?poll=1&since=30s`);
+      const resp = await fetch(`https://ntfy.sh/${topic}/json?poll=1&since=5s`);
       if (resp.ok) {
         const text = await resp.text();
         const lines = text.trim().split('\n');
@@ -402,7 +382,7 @@ export function subscribeToCouple(coupleCode, onDataReceived, onSyncStatusChange
     } catch (e) {}
   };
 
-  pollInterval = setInterval(checkPollMessages, 4000);
+  pollInterval = setInterval(checkPollMessages, 8000);
 
   // 5. Suporte adicional opcional ao Firebase (se o usuário tiver configurado)
   const firebaseDb = initFirebase();
@@ -461,10 +441,15 @@ export async function syncSaveData(data, specificEvent = null) {
     });
   }
 
-  // Salva no banco de dados Supabase na nuvem (PostgreSQL)
-  saveCoupleStateSupabase(updatedData.coupleCode, updatedData).catch((err) => {
+  // Salva no banco de dados Supabase na nuvem (PostgreSQL) com fusão inteligente
+  try {
+    const res = await saveCoupleStateSupabase(updatedData.coupleCode, updatedData);
+    if (res && res.mergedState) {
+      saveLocalData(res.mergedState);
+    }
+  } catch (err) {
     console.warn('Aviso ao sincronizar tarefas no Supabase:', err);
-  });
+  }
 
   // Opcional: Se houver Firebase configurado, salva lá também
   const database = initFirebase();

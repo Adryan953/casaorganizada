@@ -8,7 +8,8 @@ import {
   Flame,
   Zap,
   Sprout,
-  RefreshCw
+  RefreshCw,
+  Home
 } from 'lucide-react';
 import { DAYS_OF_WEEK } from '../constants/initialData';
 import { formatDateKey, getStartOfWeek } from '../services/schedulerService';
@@ -29,7 +30,17 @@ export function WeekScreen({
     const d = new Date(startOfWeek);
     d.setDate(d.getDate() + dayDef.index);
     const dateKey = formatDateKey(d);
-    const tasksForDay = schedule.filter((item) => item.date === dateKey);
+    const tasksForDay = (schedule || [])
+      .filter((item) => item.date === dateKey)
+      .sort((a, b) => {
+        const timeA = a.preferredTime || '09:00';
+        const timeB = b.preferredTime || '09:00';
+        const timeCmp = timeA.localeCompare(timeB);
+        if (timeCmp !== 0) return timeCmp;
+        const userCmp = String(a.assignedTo || '').localeCompare(String(b.assignedTo || ''));
+        if (userCmp !== 0) return userCmp;
+        return String(a.taskId || a.instanceId || '').localeCompare(String(b.taskId || b.instanceId || ''));
+      });
     const completedForDay = tasksForDay.filter((t) => t.completed).length;
 
     const totalMinutes = tasksForDay.reduce((acc, t) => acc + (t.durationMinutes || 0), 0);
@@ -171,7 +182,7 @@ export function WeekScreen({
               style={{ padding: '14px' }}
             >
               <div className="task-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <span className={`task-effort-badge effort-${task.effortLevel}`}>
                     {task.effortLevel === 1 && <Sprout size={12} />}
                     {task.effortLevel === 2 && <Zap size={12} />}
@@ -180,7 +191,23 @@ export function WeekScreen({
                   </span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Clock size={12} />
-                    <span>{task.durationMinutes}m ({task.preferredTime})</span>
+                    <span>{task.durationMinutes} min</span>
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: '700',
+                      color: 'var(--accent-primary)',
+                      backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                      padding: '2px 6px',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}
+                  >
+                    <Home size={10} />
+                    <span>{task.preferredTime} (em casa)</span>
                   </span>
                 </div>
 

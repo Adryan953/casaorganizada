@@ -14,9 +14,13 @@ import {
   Sparkles,
   Download,
   RefreshCw,
-  Smartphone
+  Smartphone,
+  Briefcase,
+  Clock,
+  Shield,
+  Zap
 } from 'lucide-react';
-import { sendTestNotification } from '../services/notificationService';
+import { sendTestNotification, requestFullAlarmPermissions } from '../services/notificationService';
 import { normalizeUserId } from '../constants/initialData';
 
 export function SettingsScreen({
@@ -33,8 +37,10 @@ export function SettingsScreen({
   syncStatus = { online: true },
   onLogout,
   onTestAlarm,
-  onForceSync
+  onForceSync,
+  onOpenAvailability
 }) {
+
   const [copied, setCopied] = useState(false);
   const [inputCode, setInputCode] = useState('');
 
@@ -137,7 +143,7 @@ export function SettingsScreen({
               color: 'var(--accent-primary)'
             }}
           >
-            v1.5.0 Oficial
+            v1.5.1 Oficial
           </span>
         </div>
 
@@ -186,7 +192,61 @@ export function SettingsScreen({
         </div>
       </div>
 
+      {/* BLOCO: Horários de Trabalho & Folgas */}
+      <div
+        className="card"
+        style={{
+          border: '2px solid var(--accent-primary)',
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, var(--bg-card) 100%)',
+          marginBottom: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer'
+        }}
+        onClick={onOpenAvailability}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--accent-primary)',
+              flexShrink: 0
+            }}
+          >
+            <Briefcase size={22} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: '0.98rem', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>
+              Horários de Trabalho, Sono & Rotina
+            </h3>
+            <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+              Defina expediente, folgas, compromissos externos e horas de sono (acordar e dormir).
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ padding: '8px 14px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenAvailability?.();
+          }}
+        >
+          <span>Abrir</span>
+        </button>
+      </div>
+
       {/* BLOCO 1: Conexão do Casal */}
+
       <div className="card" style={{ borderColor: 'var(--accent-primary)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
           <Share2 size={18} color="var(--accent-primary)" />
@@ -298,6 +358,67 @@ export function SettingsScreen({
           onChange={(e) => handleRatioChange(e.target.value)}
           style={{ width: '100%', accentColor: 'var(--accent-primary)', height: '6px', cursor: 'pointer' }}
         />
+      </div>
+
+      {/* BLOCO: Segundo Plano & Alarme com Tela Bloqueada */}
+      <div
+        className="card"
+        style={{
+          border: '2px solid #ef4444',
+          background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, var(--bg-card) 100%)',
+          marginBottom: '14px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              color: '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            <Shield size={20} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: '0.98rem', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>
+              Alarme com Celular Bloqueado & Segundo Plano
+            </h3>
+            <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+              Permite que o alarme toque alto mesmo com o app fechado e tela apagada.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ width: '100%', padding: '12px', backgroundColor: '#ef4444', borderColor: '#ef4444', fontWeight: '800', fontSize: '0.85rem', marginBottom: '10px' }}
+          onClick={async () => {
+            const res = await requestFullAlarmPermissions();
+            if (res.granted) {
+              alert('Permissão de notificações de alta prioridade concedida com sucesso! O alarme tocará mesmo com o celular bloqueado. 🚨');
+            } else {
+              alert('Por favor, ative as notificações nas configurações do seu celular para permitir o som com tela bloqueada.');
+            }
+          }}
+        >
+          <Bell size={16} />
+          <span>🔔 Ativar Permissão de Alarme em Tela Bloqueada</span>
+        </button>
+
+        <div style={{ padding: '8px 12px', borderRadius: '8px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-subtle)', fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+          <strong>Dica Android para nunca falhar:</strong>
+          <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+            <li>Configurações &gt; Aplicativos &gt; Casa em Paz &gt; <strong>Bateria</strong>: Selecione <em>"Sem restrições"</em>.</li>
+            <li>Notificações &gt; <strong>Alarmes de Atenção da Casa</strong>: Permitir tocar mesmo em Não Perturbe.</li>
+          </ul>
+        </div>
       </div>
 
       {/* BLOCO 4: Notificações e Testes */}

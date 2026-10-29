@@ -224,16 +224,44 @@ export const INITIAL_AVAILABILITY = {
     3: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     4: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     5: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
-    6: { type: 'off', freeMinutes: 300, morning: true, afternoon: true, night: true }
+    6: { type: 'off', freeMinutes: 300, morning: true, afternoon: true, night: true },
+    workSchedule: {
+      enabled: true,
+      start: '08:00',
+      end: '18:00',
+      lunchStart: '12:00',
+      lunchEnd: '13:00',
+      days: [1, 2, 3, 4, 5]
+    },
+    sleepSchedule: {
+      enabled: true,
+      wakeTime: '07:20',
+      sleepTime: '23:00'
+    },
+    busySlots: []
   },
   kah: {
-    0: { type: 'off', freeMinutes: 300, morning: true, afternoon: true, night: true },
+    0: { type: 'custom', freeMinutes: 380, startTime: '08:00', endTime: '14:20', morning: true, afternoon: true, night: false, customMode: 'range' },
     1: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     2: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     3: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     4: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
     5: { type: 'normal', freeMinutes: 120, morning: true, afternoon: false, night: true },
-    6: { type: 'normal', freeMinutes: 180, morning: true, afternoon: true, night: true }
+    6: { type: 'normal', freeMinutes: 180, morning: true, afternoon: true, night: true },
+    workSchedule: {
+      enabled: true,
+      start: '12:00',
+      end: '21:20',
+      lunchStart: '14:10',
+      lunchEnd: '16:10',
+      days: [0, 1, 2, 3, 4, 6]
+    },
+    sleepSchedule: {
+      enabled: true,
+      wakeTime: '08:00',
+      sleepTime: '00:00'
+    },
+    busySlots: []
   }
 };
 

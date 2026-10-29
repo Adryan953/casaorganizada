@@ -3,6 +3,11 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/supabaseConfig';
+import { mergeAppState } from './stateMergeService';
+
+// Importa função para obter o usuário ativo do dispositivo (para filtrar eco de atualizações)
+let _getActiveUserId = () => 'unknown';
+export function setGetActiveUserIdFn(fn) { _getActiveUserId = fn; }
 
 let supabase = null;
 
@@ -215,24 +220,43 @@ export function subscribeToSupabaseFeedbacks(coupleCode, onFeedbackChanged) {
 
 /**
  * Salva o estado completo das tarefas e rotinas do casal no banco de dados Supabase
+ * Realiza fusão inteligente e profunda com o banco para garantir que as configurações
+ * de nenhum dos parceiros sejam sobrescritas ou perdidas!
  */
-export async function saveCoupleStateSupabase(coupleCode, fullState) {
+export async function saveCoupleStateSupabase(coupleCode, fullState, updatedBy = null) {
   const client = getSupabase();
   if (!client) return { success: false, reason: 'no_client' };
 
   const code = (coupleCode || 'CASAL-PAZ').toUpperCase().trim();
+  // Identifica qual usuário/dispositivo está salvando (para filtrar eco no Realtime)
+  // Armazenado dentro do state para não depender de coluna extra no banco
+  const senderUserId = updatedBy || _getActiveUserId();
+  const stateWithSender = { ...fullState, _updatedBy: senderUserId };
+
   try {
+    // 1. Busca o estado atual gravado no Supabase para fusão segura
+    const { data: existingRow } = await client
+      .from('couples_state')
+      .select('*')
+      .eq('couple_code', code)
+      .maybeSingle();
+
+    const existingState = existingRow && existingRow.state ? existingRow.state : null;
+    const mergedState = existingState ? mergeAppState(existingState, stateWithSender) : stateWithSender;
+    // Garante que o _updatedBy do remetente atual sobrescreve o do estado anterior
+    mergedState._updatedBy = senderUserId;
+
     const { data, error } = await client
       .from('couples_state')
       .upsert({
         couple_code: code,
-        state: fullState,
+        state: mergedState,
         updated_at: new Date().toISOString()
       })
       .select();
 
     if (error) throw error;
-    return { success: true, data };
+    return { success: true, data, mergedState };
   } catch (err) {
     console.warn('Erro ao sincronizar tarefas no Supabase (couples_state):', err);
     return { success: false, error: err };
@@ -293,6 +317,13 @@ export function subscribeToCoupleStateSupabase(coupleCode, onRemoteStateReceived
         },
         (payload) => {
           if (payload && payload.new && payload.new.state) {
+            // Ignora eco do próprio dispositivo: lê _updatedBy do state JSON (sem precisar de coluna extra no banco)
+            const senderUserId = payload.new.state._updatedBy;
+            const myUserId = _getActiveUserId();
+            if (senderUserId && senderUserId === myUserId) {
+              return; // É o eco do próprio update — ignorar para evitar loop de alternância de cards
+            }
+
             onRemoteStateReceived({
               ...payload.new.state,
               updatedAt: payload.new.updated_at || payload.new.state.updatedAt

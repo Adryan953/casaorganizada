@@ -136,6 +136,33 @@ export function LoginScreen({ onLoginSuccess }) {
             <ArrowRight size={18} />
           </button>
         </form>
+
+        {/* Atalhos de Acesso Rápido em 1 Toque */}
+        <div style={{ marginTop: '22px', paddingTop: '16px', borderTop: '1px dashed var(--border-subtle)' }}>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+            Acesso Rápido em 1 Toque:
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: '10px 8px', fontSize: '0.82rem', justifyContent: 'center' }}
+              onClick={() => handleQuickLogin('Adryan', 'Adryan123')}
+              disabled={loading}
+            >
+              🧔‍♂️ Adryan
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: '10px 8px', fontSize: '0.82rem', justifyContent: 'center' }}
+              onClick={() => handleQuickLogin('Kah', 'Kah123')}
+              disabled={loading}
+            >
+              👩‍🦰 Kah
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
